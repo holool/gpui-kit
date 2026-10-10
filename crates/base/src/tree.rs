@@ -189,6 +189,7 @@ type RenderItem = dyn Fn(usize, &TreeEntry, TreeEntryState, &mut Window, &mut Ap
 
 /// Behavior and interaction state for a virtualized tree.
 pub struct TreeState {
+    layout_direction: gpui::LayoutDirection,
     focus_handle: FocusHandle,
     entries: Vec<TreeEntry>,
     scroll_handle: UniformListScrollHandle,
@@ -203,6 +204,7 @@ impl EventEmitter<TreeEvent> for TreeState {}
 impl TreeState {
     pub fn new(cx: &mut App) -> Self {
         Self {
+            layout_direction: gpui::LayoutDirection::Ltr,
             focus_handle: cx.focus_handle(),
             entries: Vec::new(),
             scroll_handle: UniformListScrollHandle::default(),
@@ -392,10 +394,9 @@ impl TreeState {
 
     fn on_action_left(&mut self, _: &SelectLeft, _: &mut Window, cx: &mut Context<Self>) {
         if let Some(ix) = self.selected_ix
-            && self
-                .entries
-                .get(ix)
-                .is_some_and(|entry| entry.is_folder() && entry.is_expanded())
+            && self.entries.get(ix).is_some_and(|entry| {
+                entry.is_folder() && entry.is_expanded() != self.layout_direction.is_rtl()
+            })
         {
             self.toggle_expand(ix, cx);
             cx.notify();
@@ -404,10 +405,9 @@ impl TreeState {
 
     fn on_action_right(&mut self, _: &SelectRight, _: &mut Window, cx: &mut Context<Self>) {
         if let Some(ix) = self.selected_ix
-            && self
-                .entries
-                .get(ix)
-                .is_some_and(|entry| entry.is_folder() && !entry.is_expanded())
+            && self.entries.get(ix).is_some_and(|entry| {
+                entry.is_folder() && entry.is_expanded() == self.layout_direction.is_rtl()
+            })
         {
             self.toggle_expand(ix, cx);
             cx.notify();
@@ -537,7 +537,13 @@ impl Styled for Tree {
 impl RenderOnce for Tree {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let focus_handle = self.state.read(cx).focus_handle.clone();
+        let direction = self
+            .style
+            .text
+            .fast_direction
+            .unwrap_or(window.layout_direction());
         self.state.update(cx, |state, _| {
+            state.layout_direction = direction;
             state.render_item = self.render_item;
             state.list_style = self.list_style;
         });

@@ -125,6 +125,7 @@ struct EditorScrollbarLayout {
 /// the text system for it again on every frame.
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct LongestLineKey {
+    direction: gpui::LayoutDirection,
     document_revision: u64,
     row: usize,
     len: usize,
@@ -732,14 +733,15 @@ impl<M: InputModeKind> TextElement<M> {
         bounds: &Bounds<Pixels>,
     ) -> Option<Path<Pixels>> {
         let corners = Self::layout_range_corners(&range, last_layout)?;
-        let points = frame_outline_points(&corners);
         let origin = bounds.origin + point(last_layout.line_number_width, px(0.));
         let mut builder = gpui::PathBuilder::fill();
-        builder.move_to(origin + *points.first()?);
-        for point in points.iter().skip(1) {
-            builder.line_to(origin + *point);
+        for rect in corners {
+            builder.move_to(origin + rect.top_left);
+            builder.line_to(origin + rect.top_right);
+            builder.line_to(origin + rect.bottom_right);
+            builder.line_to(origin + rect.bottom_left);
+            builder.close();
         }
-        builder.close();
         builder.build().ok()
     }
 
@@ -775,20 +777,38 @@ impl<M: InputModeKind> TextElement<M> {
                 let newline = is_last && range.start <= end && range.end > end;
                 if start_ix < end_ix || newline {
                     let indent = if row == 0 { px(0.) } else { line.wrap_indent };
-                    let left = alignment + indent + shaped.x_for_index(start_ix.min(end) - offset);
-                    let right = alignment
-                        + indent
-                        + if newline {
-                            shaped.width + last_layout.space_width
+                    let mut spans = shaped.selection_ranges(
+                        start_ix.min(end) - offset..end_ix.max(start_ix).min(end) - offset,
+                    );
+                    if newline {
+                        let edge = shaped.x_for_index(end - offset);
+                        spans.push(if last_layout.layout_direction.is_rtl() {
+                            edge - last_layout.space_width..edge
                         } else {
-                            shaped.x_for_index(end_ix - offset)
-                        };
-                    corners.push(Corners {
-                        top_left: point(left, y),
-                        top_right: point(right, y),
-                        bottom_left: point(left, y + last_layout.line_height),
-                        bottom_right: point(right, y + last_layout.line_height),
-                    });
+                            edge..edge + last_layout.space_width
+                        });
+                    }
+                    spans.sort_by(|a, b| a.start.partial_cmp(&b.start).unwrap());
+                    let mut merged: Vec<Range<Pixels>> = Vec::new();
+                    for span in spans {
+                        if let Some(last) = merged.last_mut() {
+                            if span.start <= last.end + px(0.01) {
+                                last.end = last.end.max(span.end);
+                                continue;
+                            }
+                        }
+                        merged.push(span);
+                    }
+                    for span in merged {
+                        let left = alignment + indent + span.start;
+                        let right = alignment + indent + span.end;
+                        corners.push(Corners {
+                            top_left: point(left, y),
+                            top_right: point(right, y),
+                            bottom_left: point(left, y + last_layout.line_height),
+                            bottom_right: point(right, y + last_layout.line_height),
+                        });
+                    }
                 }
                 offset = end;
                 y += last_layout.line_height;
@@ -1100,7 +1120,7 @@ impl<M: InputModeKind> TextElement<M> {
         let line_number_len = line_number_len(total_lines);
 
         let mut line_number_width = if state.mode.line_number() {
-            let empty_line_number = window.text_system().shape_line(
+            let empty_line_number = window.text_system().shape_line_in_direction(
                 "+".repeat(line_number_len).into(),
                 font_size,
                 &[TextRun {
@@ -1112,6 +1132,7 @@ impl<M: InputModeKind> TextElement<M> {
                     strikethrough: None,
                 }],
                 None,
+                window.layout_direction(),
             );
 
             empty_line_number.width + LINE_NUMBER_RIGHT_MARGIN
@@ -1152,7 +1173,7 @@ impl<M: InputModeKind> TextElement<M> {
         let tab_font_size = text_size;
 
         let space_text = SharedString::new_static("•");
-        let space = window.text_system().shape_line(
+        let space = window.text_system().shape_line_in_direction(
             space_text.clone(),
             space_font_size,
             &[TextRun {
@@ -1164,10 +1185,11 @@ impl<M: InputModeKind> TextElement<M> {
                 strikethrough: None,
             }],
             None,
+            window.layout_direction(),
         );
 
         let tab_text = SharedString::new_static("→");
-        let tab = window.text_system().shape_line(
+        let tab = window.text_system().shape_line_in_direction(
             tab_text.clone(),
             tab_font_size,
             &[TextRun {
@@ -1179,6 +1201,7 @@ impl<M: InputModeKind> TextElement<M> {
                 strikethrough: None,
             }],
             None,
+            window.layout_direction(),
         );
 
         Some(WhitespaceIndicators { space, tab })
@@ -1235,11 +1258,13 @@ impl<M: InputModeKind> TextElement<M> {
                 underline: None,
                 strikethrough: None,
             };
-            Some(
-                window
-                    .text_system()
-                    .shape_line(first_text, font_size, &[first_run], None),
-            )
+            Some(window.text_system().shape_line_in_direction(
+                first_text,
+                font_size,
+                &[first_run],
+                None,
+                window.layout_direction(),
+            ))
         } else {
             None
         };
@@ -1260,9 +1285,13 @@ impl<M: InputModeKind> TextElement<M> {
                 };
                 // Use space for empty lines so they take up height
                 let shaped_text = if text.is_empty() { " ".into() } else { text };
-                window
-                    .text_system()
-                    .shape_line(shaped_text, font_size, &[run], None)
+                window.text_system().shape_line_in_direction(
+                    shaped_text,
+                    font_size,
+                    &[run],
+                    None,
+                    window.layout_direction(),
+                )
             })
             .collect();
 
@@ -1767,11 +1796,12 @@ impl<M: InputModeKind> TextElement<M> {
                                 let part = &text[offset..local.start];
                                 width += window
                                     .text_system()
-                                    .shape_line(
+                                    .shape_line_in_direction(
                                         part.to_owned().into(),
                                         style.font_size.to_pixels(window.rem_size()),
                                         &[style.to_run(part.len())],
                                         None,
+                                        window.layout_direction(),
                                     )
                                     .width;
                                 width +=
@@ -1782,11 +1812,12 @@ impl<M: InputModeKind> TextElement<M> {
                             width
                                 + window
                                     .text_system()
-                                    .shape_line(
+                                    .shape_line_in_direction(
                                         part.to_owned().into(),
                                         style.font_size.to_pixels(window.rem_size()),
                                         &[style.to_run(part.len())],
                                         None,
+                                        window.layout_direction(),
                                     )
                                     .width
                         })
@@ -1852,11 +1883,12 @@ impl<M: InputModeKind> TextElement<M> {
                         let local = span.range().start - line_start..span.range().end - line_start;
                         if offset < local.start {
                             let part = offset..local.start;
-                            let shaped = window.text_system().shape_line(
+                            let shaped = window.text_system().shape_line_in_direction(
                                 text[part.clone()].to_owned().into(),
                                 font_size,
                                 &runs_for_range(runs, run_offset, &part),
                                 None,
+                                window.layout_direction(),
                             );
                             let width = shaped.width;
                             fragments.push(InlineFragment {
@@ -1879,11 +1911,12 @@ impl<M: InputModeKind> TextElement<M> {
                     }
                     if offset < range.end {
                         let part = offset..range.end;
-                        let shaped = window.text_system().shape_line(
+                        let shaped = window.text_system().shape_line_in_direction(
                             text[part.clone()].to_owned().into(),
                             font_size,
                             &runs_for_range(runs, run_offset, &part),
                             None,
+                            window.layout_direction(),
                         );
                         let width = shaped.width;
                         fragments.push(InlineFragment {
@@ -2014,9 +2047,13 @@ impl<M: InputModeKind> TextElement<M> {
             let text: SharedString = display_text.to_string().into();
             let aligned_runs = align_runs_to_char_boundaries(&text, runs);
             let line_runs = aligned_runs.as_deref().unwrap_or(runs);
-            let shaped_line = window
-                .text_system()
-                .shape_line(text, font_size, line_runs, None);
+            let shaped_line = window.text_system().shape_line_in_direction(
+                text,
+                font_size,
+                line_runs,
+                None,
+                window.layout_direction(),
+            );
 
             let line_layout = LineLayout::new()
                 .lines(smallvec::smallvec![shaped_line])
@@ -2032,11 +2069,12 @@ impl<M: InputModeKind> TextElement<M> {
             let mut line_has_background = false;
 
             for (line, line_runs) in placeholder_line_runs(&placeholder_text, runs) {
-                let shaped_line = window.text_system().shape_line(
+                let shaped_line = window.text_system().shape_line_in_direction(
                     line.to_string().into(),
                     font_size,
                     &line_runs,
                     None,
+                    window.layout_direction(),
                 );
                 line_has_background |= has_background(&line_runs);
                 placeholder_lines.push(shaped_line);
@@ -2083,9 +2121,13 @@ impl<M: InputModeKind> TextElement<M> {
                 let sub_line: SharedString = line_text[range.clone()].to_string().into();
                 let line_runs =
                     align_runs_to_char_boundaries(&sub_line, &line_runs).unwrap_or(line_runs);
-                let shaped_line = window
-                    .text_system()
-                    .shape_line(sub_line, font_size, &line_runs, None);
+                let shaped_line = window.text_system().shape_line_in_direction(
+                    sub_line,
+                    font_size,
+                    &line_runs,
+                    None,
+                    window.layout_direction(),
+                );
 
                 line_has_background |= has_background(&line_runs);
                 wrapped_lines.push(shaped_line);
@@ -2280,6 +2322,8 @@ struct CursorRenderInfo {
 pub(super) struct PrepaintState {
     /// The lines of entire lines.
     last_layout: LastLayout,
+    /// Hints are painted separately and never participate in editing geometry.
+    placeholder_lines: Option<Vec<LineLayout>>,
     token_elements: Vec<AnyElement>,
     /// The lines only contains the visible lines in the viewport, based on `visible_range`.
     ///
@@ -2634,6 +2678,7 @@ impl<M: InputModeKind> Element for TextElement<M> {
         };
 
         let mut last_layout = LastLayout {
+            layout_direction: window.layout_direction(),
             visible_range,
             visible_buffer_lines,
             visible_line_byte_offsets,
@@ -2646,7 +2691,11 @@ impl<M: InputModeKind> Element for TextElement<M> {
             space_width,
             lines: Rc::new(vec![]),
             cursor_bounds: None,
-            text_align: state.text_align,
+            text_align: if state.text_align_explicit || state.text_align != TextAlign::Left {
+                state.text_align
+            } else {
+                style.text_align
+            },
             content_width: bounds.size.width,
         };
 
@@ -2723,6 +2772,25 @@ impl<M: InputModeKind> Element for TextElement<M> {
             window,
         );
 
+        // The hint is presentation, not document text. In particular, an empty
+        // right-aligned input must place byte zero at the reading edge regardless
+        // of the hint's width, script, or number of lines.
+        let (lines, placeholder_lines) = if is_empty {
+            let empty = window.text_system().shape_line_in_direction(
+                SharedString::default(),
+                text_size,
+                &[],
+                None,
+                window.layout_direction(),
+            );
+            (
+                vec![LineLayout::new().lines(smallvec::smallvec![empty])],
+                Some(lines),
+            )
+        } else {
+            (lines, None)
+        };
+
         let mut longest_line_width = wrap_width.unwrap_or(px(0.));
         // 1. Single line
         // 2. Multi-line with soft wrap disabled.
@@ -2730,6 +2798,7 @@ impl<M: InputModeKind> Element for TextElement<M> {
             let longest_row = state.display_map.longest_row();
             let longest_line = state.text.slice_line(longest_row);
             let key = LongestLineKey {
+                direction: window.layout_direction(),
                 document_revision: state.document_revision,
                 row: longest_row,
                 len: longest_line.len(),
@@ -2747,7 +2816,7 @@ impl<M: InputModeKind> Element for TextElement<M> {
                     let longest_line: SharedString = longest_line.to_string().into();
                     window
                         .text_system()
-                        .shape_line(
+                        .shape_line_in_direction(
                             longest_line.clone(),
                             text_size,
                             &[TextRun {
@@ -2759,6 +2828,7 @@ impl<M: InputModeKind> Element for TextElement<M> {
                                 strikethrough: None,
                             }],
                             wrap_width,
+                            window.layout_direction(),
                         )
                         .width
                 }
@@ -2915,11 +2985,13 @@ impl<M: InputModeKind> Element for TextElement<M> {
                 };
 
                 let mut sub_lines: SmallVec<[ShapedLine; 1]> = SmallVec::new();
-                sub_lines.push(
-                    window
-                        .text_system()
-                        .shape_line(line_no, text_size, &runs, None),
-                );
+                sub_lines.push(window.text_system().shape_line_in_direction(
+                    line_no,
+                    text_size,
+                    &runs,
+                    None,
+                    window.layout_direction(),
+                ));
                 for _ in 0..line.wrapped_lines.len().saturating_sub(1) {
                     sub_lines.push(ShapedLine::default());
                 }
@@ -2948,6 +3020,7 @@ impl<M: InputModeKind> Element for TextElement<M> {
 
         let token_elements = self.prepaint_tokens(&last_layout, bounds, token_elements, window, cx);
         PrepaintState {
+            placeholder_lines,
             token_elements,
             hitbox,
             bounds,
@@ -3129,6 +3202,24 @@ impl<M: InputModeKind> Element for TextElement<M> {
         for (path, color) in prepaint.document_color_paths.iter() {
             let color = if disabled { color.opacity(0.5) } else { *color };
             window.paint_path(path.clone(), color);
+        }
+
+        if let Some(lines) = &prepaint.placeholder_lines {
+            let mut y = input_bounds.top();
+            for line in lines {
+                line.paint(
+                    point(
+                        input_bounds.left() + prepaint.last_layout.line_number_width,
+                        y,
+                    ),
+                    line_height,
+                    text_align,
+                    Some(prepaint.last_layout.content_width),
+                    window,
+                    cx,
+                );
+                y += line.size(line_height).height;
+            }
         }
 
         // Paint text with inline completion ghost line support
@@ -3615,6 +3706,208 @@ mod tests {
             DecorationHarness(state)
         });
         (editor.unwrap(), window)
+    }
+
+    #[gpui::test]
+    fn empty_input_geometry_ignores_placeholder_text(cx: &mut TestAppContext) {
+        let (editor, window) = decoration_editor(cx, "", true);
+        let mut cx = VisualTestContext::from_window(window.into(), cx);
+        cx.update(|window, cx| {
+            for align in [TextAlign::Left, TextAlign::Right, TextAlign::Center] {
+                for hint in [
+                    "",
+                    "اكتب الاسم",
+                    "English hint",
+                    "English (عربي) 123",
+                    "first line\nsecond line",
+                    "A long hint that overflows the input and must never scroll its empty caret",
+                ] {
+                    for value in ["", "أمين بن علي", ""] {
+                        editor.update(cx, |state, cx| {
+                            state.set_text_align(align, cx);
+                            state.set_placeholder(hint, window, cx);
+                            state.set_value(value, window, cx);
+                        });
+                        for _ in 0..3 {
+                            window.draw(cx).clear(cx);
+                        }
+                        if !value.is_empty() {
+                            continue;
+                        }
+                        let state = editor.read(cx);
+                        let layout = state.last_layout.as_ref().unwrap();
+                        assert_eq!(layout.text_align, align);
+                        assert_eq!(layout.lines.len(), 1);
+                        assert_eq!(layout.lines[0].len(), 0);
+                        assert_eq!(layout.lines[0].wrapped_lines.len(), 1);
+                        let pos = layout.lines[0]
+                            .position_for_index(0, layout, false)
+                            .unwrap();
+                        assert_eq!(pos.x, layout.alignment_offset(px(0.)));
+                        assert_eq!(pos.y, px(0.));
+                        assert_eq!(state.scroll_handle.offset(), Point::default());
+                        for x in [px(0.), layout.content_width / 2., layout.content_width] {
+                            assert_eq!(layout.lines[0].closest_index_for_x(x, layout), 0);
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn native_arabic_input_arrows_selections_and_ime_use_source_bytes() {
+        use crate::input::{MoveLeft, MoveRight};
+        use gpui::{Directional as _, TestDispatcher};
+        let mut cx = TestAppContext::build_with_text_system(
+            TestDispatcher::new(0),
+            None,
+            gpui_fast_macos::text_system_for_tests(),
+        );
+        cx.update(crate::init);
+        struct Harness(Entity<crate::input::InputState>);
+        impl Render for Harness {
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                div().rtl().size_full().child(self.0.clone())
+            }
+        }
+        let mut input = None;
+        let handle = cx.open_window(size(px(240.), px(140.)), |window, cx| {
+            let state =
+                cx.new(|cx| crate::input::InputState::new(window, cx).default_value("أَهْلاً بالعالم"));
+            input = Some(state.clone());
+            Harness(state)
+        });
+        let input = input.unwrap();
+        let mut cx = VisualTestContext::from_window(handle.into(), &mut cx);
+        cx.update(|window, cx| {
+            window.draw(cx).clear(cx);
+            input.update(cx, |state, cx| {
+                state.set_selected_range(0..0, cx);
+                state.focus(window, cx);
+            });
+            window.draw(cx).clear(cx);
+            input.update(cx, |state, cx| {
+                let first = "أَ".len();
+                state.left(&MoveLeft, window, cx);
+                assert_eq!(state.cursor(), first);
+                state.right(&MoveRight, window, cx);
+                assert_eq!(state.cursor(), 0);
+                state.select_left(&crate::actions::SelectLeft, window, cx);
+                assert_eq!(state.selected_range(), 0..first);
+                assert!(state.value().is_char_boundary(state.cursor()));
+            });
+            window.draw(cx).clear(cx);
+            let state = input.read(cx);
+            let layout = state.last_layout.as_ref().unwrap();
+            assert_eq!(layout.text_align, TextAlign::Right);
+            let shaped = &layout.lines[0].wrapped_lines[0];
+            assert_eq!(shaped.closest_index_for_x(shaped.width + px(10.)), 0);
+            assert_eq!(shaped.closest_index_for_x(px(-10.)), state.value().len());
+            assert!(
+                !TextElement::<crate::input::InputMode>::layout_range_corners(
+                    &(0..state.cursor()),
+                    layout
+                )
+                .unwrap()
+                .is_empty()
+            );
+            input.update(cx, |state, cx| {
+                state.replace_and_mark_text_in_range(None, "سَ", Some(2..2), window, cx);
+                assert!(state.ime_marked_range.is_some());
+            });
+            window.draw(cx).clear(cx);
+            input.update(cx, |state, cx| {
+                let bounds = state.input_bounds;
+                let candidate = state.bounds_for_range(0..2, bounds, window, cx).unwrap();
+                assert!(candidate.size.width >= px(0.));
+                state.replace_text_in_range(None, "سلام", window, cx);
+                assert!(state.ime_marked_range.is_none());
+                assert!(state.value().starts_with("سلام"));
+            });
+        });
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn native_arabic_arrows_cross_hard_and_soft_line_boundaries() {
+        use crate::input::{MoveLeft, MoveRight, TextareaState};
+        use gpui::{Directional as _, TestDispatcher};
+        let mut cx = TestAppContext::build_with_text_system(
+            TestDispatcher::new(0),
+            None,
+            gpui_fast_macos::text_system_for_tests(),
+        );
+        cx.update(crate::init);
+        struct Harness(Entity<TextareaState>);
+        impl Render for Harness {
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                div().rtl().size_full().child(self.0.clone())
+            }
+        }
+        let mut input = None;
+        let handle = cx.open_window(size(px(240.), px(140.)), |window, cx| {
+            let state = cx.new(|cx| TextareaState::new(window, cx).default_value("مرحبا\nعالم"));
+            input = Some(state.clone());
+            Harness(state)
+        });
+        let input = input.unwrap();
+        let mut cx = VisualTestContext::from_window(handle.into(), &mut cx);
+        cx.update(|window, cx| {
+            window.draw(cx).clear(cx);
+            input.update(cx, |state, cx| {
+                state.set_selected_range("مرحبا".len().."مرحبا".len(), cx);
+                state.left(&MoveLeft, window, cx);
+                assert_eq!(state.cursor(), "مرحبا\n".len());
+                state.right(&MoveRight, window, cx);
+                assert_eq!(state.cursor(), "مرحبا".len());
+                state.set_value("مرحبا ".repeat(24), window, cx);
+                state.set_selected_range(0..0, cx);
+            });
+            window.draw(cx).clear(cx);
+            input.update(cx, |state, cx| {
+                assert!(
+                    state.last_layout.as_ref().unwrap().lines[0]
+                        .wrapped_lines
+                        .len()
+                        > 1
+                );
+                let len = state.value().len();
+                let mut saw_wrap_affinity = false;
+                for _ in 0..len * 2 {
+                    if state.cursor() == len {
+                        break;
+                    }
+                    state.left(&MoveLeft, window, cx);
+                    saw_wrap_affinity |= state.cursor_line_end_affinity;
+                }
+                assert_eq!(state.cursor(), len, "left must reach the final wrapped row");
+                assert!(saw_wrap_affinity);
+                for _ in 0..len * 2 {
+                    if state.cursor() == 0 {
+                        break;
+                    }
+                    state.right(&MoveRight, window, cx);
+                }
+                assert_eq!(
+                    state.cursor(),
+                    0,
+                    "right must return across every wrapped row"
+                );
+                for _ in 0..len * 2 {
+                    if state.cursor() == len {
+                        break;
+                    }
+                    state.select_left(&crate::actions::SelectLeft, window, cx);
+                }
+                assert_eq!(
+                    state.selected_range(),
+                    0..len,
+                    "Shift+left must cross soft wraps"
+                );
+            });
+        });
     }
 
     #[gpui::test]

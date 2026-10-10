@@ -15,6 +15,7 @@ members = [
     "examples/app_assets",
     "examples/fps_monitor",
     "examples/hello_world",
+    "examples/arabic_rtl",
     "examples/input",
     "examples/editor",
     "examples/tig",
@@ -60,25 +61,22 @@ gpui-webview = { path = "crates/webview", version = "0.7.1" }
 gpui-component-shell = { path = "crates/component-shell", version = "0.7.1" }
 story = { path = "crates/story" }
 
-# GPUI comes from the `gpui-pre-*` snapshots of Zed's crates, and any snapshot
-# may change GPUI's API. These requirements are what the published gpui-kit
-# crates carry to crates.io, so they pin the exact snapshot the release was
-# built against: a caret requirement let the weekly release move applications
-# onto a newer snapshot that gpui-component did not compile with (#3156). Bump
-# every snapshot crate together with its Cargo.lock entry; `script/check-gpui-pin.ts`
-# fails CI when a pin is not exact.
-gpui = { package = "gpui-pre", version = "=0.3.8" }
-gpui_platform = { package = "gpui-pre-platform", version = "=0.3.8", features = ["font-kit", "x11", "wayland", "runtime_shaders"] }
-gpui_web = { package = "gpui-pre-web", version = "=0.3.8" }
-# Fast is optional; existing crates select it through their gpui-fast feature.
+# Holool pins every GPUI dependency to one Fast revision. The gpui-pre stand-ins
+# preserve Kit's dependency names and exact snapshot API version while sharing
+# Fast's underlying types, including for consumers without default features.
+gpui = { git = "https://github.com/holool/gpui-fast", rev = "761758e722ac87d4a5abdc9290ac0a83e9ac0877", package = "gpui-pre", version = "=0.3.8" }
+gpui_platform = { git = "https://github.com/holool/gpui-fast", rev = "761758e722ac87d4a5abdc9290ac0a83e9ac0877", package = "gpui-pre-platform", version = "=0.3.8", features = ["font-kit", "x11", "wayland", "runtime_shaders"] }
+gpui_web = { git = "https://github.com/holool/gpui-fast", rev = "761758e722ac87d4a5abdc9290ac0a83e9ac0877", package = "gpui-pre-web", version = "=0.3.8" }
+# Holool selects Fast by default. Compatibility crates below share the same engine.
 # Explicit package fields make Cargo use these dependency keys as Rust crate names;
 # the packages declare the same library names as the pre backend.
-gpui-fast = { package = "gpui-fast", version = "0.1.3", features = ["windows-manifest-provided-by-host"] }
-gpui-fast-platform = { package = "gpui-fast-platform", version = "0.1.3", features = ["font-kit", "x11", "wayland", "runtime_shaders"] }
-gpui-fast-web = { package = "gpui-fast-web", version = "0.1.3" }
-gpui_macros = { package = "gpui-pre-macros", version = "=0.3.8" }
-reqwest_client = { package = "gpui-pre-reqwest-client", version = "=0.3.8" }
-sum-tree = { package = "gpui-pre-sum-tree", version = "=0.3.8" }
+gpui-fast = { git = "https://github.com/holool/gpui-fast", rev = "761758e722ac87d4a5abdc9290ac0a83e9ac0877", package = "gpui", features = ["windows-manifest-provided-by-host"] }
+gpui-fast-platform = { git = "https://github.com/holool/gpui-fast", rev = "761758e722ac87d4a5abdc9290ac0a83e9ac0877", package = "gpui_platform", features = ["font-kit", "x11", "wayland", "runtime_shaders"] }
+gpui-fast-macos = { package = "gpui_macos", git = "https://github.com/holool/gpui-fast", rev = "761758e722ac87d4a5abdc9290ac0a83e9ac0877", features = ["font-kit", "runtime_shaders", "test-support"] }
+gpui-fast-web = { git = "https://github.com/holool/gpui-fast", rev = "761758e722ac87d4a5abdc9290ac0a83e9ac0877", package = "gpui_web" }
+gpui_macros = { git = "https://github.com/holool/gpui-fast", rev = "761758e722ac87d4a5abdc9290ac0a83e9ac0877", package = "gpui-pre-macros", version = "=0.3.8" }
+reqwest_client = { git = "https://github.com/holool/gpui-fast", rev = "761758e722ac87d4a5abdc9290ac0a83e9ac0877", package = "gpui-pre-reqwest-client", version = "=0.3.8" }
+sum-tree = { git = "https://github.com/holool/gpui-fast", rev = "761758e722ac87d4a5abdc9290ac0a83e9ac0877", package = "gpui-pre-sum-tree", version = "=0.3.8" }
 reqwest = { package = "gpui-pre-reqwest", version = "=0.12.15", default-features = false, features = [
     "charset",
     "http2",
@@ -153,9 +151,9 @@ taffy = { opt-level = 3 }
 ttf-parser = { opt-level = 3 }
 smol = { opt-level = 3 }
 gpui-pre = { opt-level = 3 }
-gpui-fast = { opt-level = 3 }
-gpui-fast-platform = { opt-level = 3 }
-gpui-fast-macros = { opt-level = 3 }
+gpui = { opt-level = 3 }
+gpui_platform = { opt-level = 3 }
+gpui_macros = { opt-level = 3 }
 gpui-pre-platform = { opt-level = 3 }
 gpui-pre-macros = { opt-level = 3 }
 tree-sitter = { opt-level = 3 }

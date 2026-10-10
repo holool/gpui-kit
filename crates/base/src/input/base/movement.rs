@@ -15,6 +15,69 @@ pub(crate) enum MoveDirection {
 }
 
 impl<M: InputModeKind> InputBaseState<M> {
+    fn visual_selection_edge(&self, selection: &CursorSelection, right: bool) -> usize {
+        let start = self.text.offset_to_point(selection.start);
+        let end = self.text.offset_to_point(selection.end);
+        if start.row == end.row {
+            if let Some(layout) = &self.last_layout {
+                if let Some(line) = layout.line(start.row) {
+                    if let (Some(a), Some(b)) = (
+                        line.position_for_index(start.column, layout, false),
+                        line.position_for_index(end.column, layout, false),
+                    ) {
+                        if a.y == b.y {
+                            return if (a.x > b.x) == right {
+                                selection.start
+                            } else {
+                                selection.end
+                            };
+                        }
+                    }
+                }
+            }
+        }
+        if right {
+            selection.end
+        } else {
+            selection.start
+        }
+    }
+    pub(super) fn bidi_visual_target(&self, offset: usize, right: bool) -> Option<(usize, bool)> {
+        let layout = self.last_layout.as_ref()?;
+        let point = self.text.offset_to_point(offset);
+        let line = layout.line(point.row)?;
+        let base = self.text.line_start_offset(point.row);
+        let affinity = self.line_end_affinity_at(offset);
+        let mut start = 0;
+        for (row_index, row) in line.wrapped_lines.iter().enumerate() {
+            let end = start + row.len;
+            let last = row_index + 1 == line.wrapped_lines.len();
+            if point.column < end || (point.column == end && (affinity || last)) {
+                let next = row.visual_caret(point.column - start, right)?;
+                if next == point.column - start {
+                    let forward = right != layout.layout_direction.is_rtl();
+                    if forward {
+                        if !last {
+                            return Some((base + end, false));
+                        }
+                        let next_row = point.row + 1;
+                        if next_row < self.text.lines_len() {
+                            return Some((self.text.line_start_offset(next_row), false));
+                        }
+                    } else if row_index > 0 {
+                        return Some((base + start, true));
+                    } else if point.row > 0 {
+                        return Some((self.previous_boundary(base), false));
+                    }
+                    return Some((offset, affinity));
+                }
+                return Some((base + start + next, next == row.len && !last));
+            }
+            start = end;
+        }
+        None
+    }
+
     /// Compute the column anchor for the given `offset`. Wrap/fold-aware.
     pub(super) fn preferred_column_for(&self, offset: usize) -> Option<(Pixels, usize)> {
         self.preferred_column_for_with_affinity(offset, false)
@@ -296,19 +359,28 @@ impl<M: InputModeKind> InputBaseState<M> {
         // palette) can act on it. This is harmless when nothing is bound there.
         // With multiple cursors the others can still move, so only the
         // single-cursor case propagates.
-        if self.selections.is_single() && self.active_selection().is_empty() && self.cursor() == 0 {
+        if self.selections.is_single()
+            && self.active_selection().is_empty()
+            && self.cursor() == 0
+            && self.bidi_visual_target(0, false).is_none()
+        {
             cx.propagate();
             return;
         }
 
         self.move_all_cursors(
             |s, sel| {
-                let offset = if sel.is_empty() {
-                    s.previous_boundary(sel.cursor_offset())
+                let (offset, affinity) = if sel.is_empty() {
+                    s.bidi_visual_target(sel.cursor_offset(), false)
+                        .unwrap_or_else(|| (s.previous_boundary(sel.cursor_offset()), false))
                 } else {
-                    sel.start
+                    (s.visual_selection_edge(sel, false), false)
                 };
-                (offset, s.preferred_column_for(offset), false)
+                (
+                    offset,
+                    s.preferred_column_for_with_affinity(offset, affinity),
+                    affinity,
+                )
             },
             None,
             window,
@@ -322,6 +394,7 @@ impl<M: InputModeKind> InputBaseState<M> {
         if self.selections.is_single()
             && self.active_selection().is_empty()
             && self.cursor() == self.text.len()
+            && self.bidi_visual_target(self.cursor(), true).is_none()
         {
             cx.propagate();
             return;
@@ -329,12 +402,17 @@ impl<M: InputModeKind> InputBaseState<M> {
 
         self.move_all_cursors(
             |s, sel| {
-                let offset = if sel.is_empty() {
-                    s.next_boundary(sel.cursor_offset())
+                let (offset, affinity) = if sel.is_empty() {
+                    s.bidi_visual_target(sel.cursor_offset(), true)
+                        .unwrap_or_else(|| (s.next_boundary(sel.cursor_offset()), false))
                 } else {
-                    sel.end
+                    (s.visual_selection_edge(sel, true), false)
                 };
-                (offset, s.preferred_column_for(offset), false)
+                (
+                    offset,
+                    s.preferred_column_for_with_affinity(offset, affinity),
+                    affinity,
+                )
             },
             None,
             window,

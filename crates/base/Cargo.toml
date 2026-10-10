@@ -91,3 +91,6 @@ reqwest_client.workspace = true
 
 [lints]
 workspace = true
+
+[target.'cfg(target_os = "macos")'.dev-dependencies]
+gpui-fast-macos.workspace = true

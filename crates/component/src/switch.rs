@@ -2,6 +2,7 @@ use crate::{
     ActiveTheme, Disableable, FocusableExt, Side, Sizable, Size, StyleSized as _, StyledExt,
     ThemeStyled as _, text::Text, tooltip::ComponentTooltip,
 };
+use gpui::Directional as _;
 use gpui::{
     App, Background, ElementId, Hsla, InteractiveElement, IntoElement, ParentElement as _,
     RenderOnce, SharedString, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
@@ -212,9 +213,15 @@ impl RenderOnce for Switch {
         // documented precedence, which left the travel visible in one direction
         // only. The spring owns it end to end and reverses from wherever the
         // thumb is when the switch is toggled again mid-travel.
+        let rtl = self
+            .style
+            .text
+            .fast_direction
+            .unwrap_or(window.layout_direction())
+            .is_rtl();
         let thumb_x = spring(
             (self.id.clone(), "thumb"),
-            if checked {
+            if checked != rtl {
                 bg_width - bar_width - inset * 2
             } else {
                 px(0.)
@@ -249,6 +256,7 @@ impl RenderOnce for Switch {
                 .child(
                     // Switch Bar
                     SwitchTrack::new((self.id.clone(), "track"))
+                        .ltr()
                         .checked(checked)
                         .disabled(self.disabled)
                         .when(cfg!(test), |this| {
@@ -287,7 +295,12 @@ impl RenderOnce for Switch {
                                 .rounded(radius)
                                 .size(bar_width)
                                 .left(thumb_x)
-                                .bg(toggle_bg),
+                                .bg(toggle_bg)
+                                .when(cfg!(test), |this| {
+                                    this.child(
+                                        div().size_full().debug_selector(|| "switch-thumb".into()),
+                                    )
+                                }),
                         ),
                 )
                 .when_some(self.label, |this, label| {
@@ -560,6 +573,47 @@ mod tests {
                     assert!(label.origin.x >= track.right());
                     assert!(label.right() <= container.right());
                     assert!(label.size.height > track.size.height, "the label must wrap");
+                }
+            }
+        }
+    }
+
+    #[gpui::test]
+    fn inherited_direction_places_checked_thumb_at_inline_end(cx: &mut TestAppContext) {
+        struct DirectionHarness {
+            rtl: bool,
+            checked: bool,
+        }
+        impl Render for DirectionHarness {
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                div()
+                    .w(px(160.))
+                    .direction(if self.rtl {
+                        gpui::LayoutDirection::Rtl
+                    } else {
+                        gpui::LayoutDirection::Ltr
+                    })
+                    .child(Switch::new("switch").checked(self.checked).label("التفعيل"))
+            }
+        }
+        cx.update(crate::init);
+        for rtl in [false, true] {
+            for checked in [false, true] {
+                let (_, visual) = cx.add_window_view(move |_, _| DirectionHarness { rtl, checked });
+                visual.update(|window, cx| window.draw(cx).clear(cx));
+                let track = visual.debug_bounds("switch-bar").unwrap();
+                let thumb = visual.debug_bounds("switch-thumb").unwrap();
+                let label = visual.debug_bounds("switch-label").unwrap();
+                let expected = if checked != rtl {
+                    track.right() - px(2.) - thumb.size.width
+                } else {
+                    track.left() + px(2.)
+                };
+                assert!((thumb.left() - expected).abs() < px(0.1));
+                if rtl {
+                    assert!(label.right() <= track.left());
+                } else {
+                    assert!(label.left() >= track.right());
                 }
             }
         }

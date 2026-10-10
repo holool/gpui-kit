@@ -1191,7 +1191,12 @@ impl PopupMenu {
     fn update_submenu_menu_anchor(&mut self, window: &Window) {
         let bounds = self.bounds;
         let max_width = self.max_width();
-        let (anchor, left) = if max_width + bounds.origin.x > window.bounds().size.width {
+        let open_left = if window.layout_direction().is_rtl() {
+            bounds.origin.x >= max_width
+        } else {
+            max_width + bounds.origin.x > window.bounds().size.width
+        };
+        let (anchor, left) = if open_left {
             (Anchor::TopRight, -px(16.))
         } else {
             (Anchor::TopLeft, bounds.size.width - px(8.))
@@ -1393,9 +1398,18 @@ impl PopupMenu {
                                 .justify_between()
                                 .child(label.clone())
                                 .child(
-                                    Icon::new(IconName::ChevronRight)
-                                        .xsmall()
-                                        .text_color(cx.theme().muted_foreground),
+                                    Icon::new(
+                                        if matches!(
+                                            self.submenu_anchor.0,
+                                            Anchor::TopRight | Anchor::BottomRight
+                                        ) {
+                                            IconName::ChevronLeft
+                                        } else {
+                                            IconName::ChevronRight
+                                        },
+                                    )
+                                    .xsmall()
+                                    .text_color(cx.theme().muted_foreground),
                                 ),
                         ),
                 )

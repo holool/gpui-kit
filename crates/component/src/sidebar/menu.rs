@@ -10,7 +10,7 @@ use crate::{
 use gpui::{
     AnyElement, App, ClickEvent, ElementId, InteractiveElement as _, IntoElement,
     ParentElement as _, Role, SharedString, StatefulInteractiveElement as _, StyleRefinement,
-    Styled, Window, div, percentage, prelude::FluentBuilder,
+    Styled, Window, div, prelude::FluentBuilder,
 };
 use gpui_base::TestSupportExt as _;
 use std::rc::Rc;
@@ -344,11 +344,14 @@ impl SidebarItem for SidebarMenuItem {
                                         .xsmall()
                                         .ghost()
                                         .icon(
-                                            Icon::new(IconName::ChevronRight)
-                                                .size_4()
-                                                .when(is_open, |this| {
-                                                    this.rotate(percentage(90. / 360.))
-                                                }),
+                                            Icon::new(if is_open {
+                                                IconName::ChevronDown
+                                            } else if window.layout_direction().is_rtl() {
+                                                IconName::ChevronLeft
+                                            } else {
+                                                IconName::ChevronRight
+                                            })
+                                            .size_4(),
                                         )
                                         .on_click({
                                             move |_, _, cx| {

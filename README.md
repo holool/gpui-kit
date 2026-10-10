@@ -1,3 +1,5 @@
+> **Holool RTL fork:** uses `holool/gpui-fast` by default. See [Arabic/RTL support](website/docs/rtl.md) and run `cargo run -p arabic_rtl` for the example. The Git dependencies are pinned together; this fork is not a crates.io release.
+
 <p align="center">
   <img src="https://raw.githubusercontent.com/longbridge/gpui-kit/main/website/public/logo.svg" width="112" alt="GPUI Kit logo" />
   <br>

@@ -4,8 +4,8 @@ use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AccessibleAction, AnyElement, App, DefiniteLength, Edges, ElementId, Entity, Hsla,
     InteractiveElement as _, IntoElement, MouseButton, ParentElement as _, Rems, RenderOnce, Role,
-    SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled, TextAlign, TouchPhase,
-    Window, div, px, relative,
+    SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled, TouchPhase, Window,
+    div, px, relative,
 };
 
 use crate::button::{Button, ButtonRounded, ButtonVariants as _};
@@ -535,7 +535,13 @@ impl Styled for Input {
 impl RenderOnce for Input {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         const LINE_HEIGHT: Rems = Rems(1.25);
-        let text_align = self.style.text.text_align.unwrap_or(TextAlign::Left);
+        let text_align = self.style.text.text_align.unwrap_or_else(|| {
+            self.style
+                .text
+                .fast_direction
+                .unwrap_or(window.layout_direction())
+                .text_align()
+        });
         let state = self.state.clone();
         state.install_token_presentation(
             Some(self.token_renderer.unwrap_or_else(|| {

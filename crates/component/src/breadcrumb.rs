@@ -139,11 +139,15 @@ impl Breadcrumb {
 #[derive(IntoElement)]
 struct BreadcrumbSeparator;
 impl RenderOnce for BreadcrumbSeparator {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        Icon::new(IconName::ChevronRight)
-            .text_color(cx.theme().muted_foreground)
-            .size_3p5()
-            .into_any_element()
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        Icon::new(if window.layout_direction().is_rtl() {
+            IconName::ChevronLeft
+        } else {
+            IconName::ChevronRight
+        })
+        .text_color(cx.theme().muted_foreground)
+        .size_3p5()
+        .into_any_element()
     }
 }
 
