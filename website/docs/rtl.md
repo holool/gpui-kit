@@ -1,3 +1,8 @@
+---
+title: "Arabic and RTL (Holool fork)"
+description: "Inherited RTL layout, native Arabic editing, and GPUI Fast integration in the Holool fork."
+---
+
 # Arabic and RTL (Holool fork)
 
 The Holool fork uses [Holool GPUI Fast](https://github.com/holool/gpui-fast) by

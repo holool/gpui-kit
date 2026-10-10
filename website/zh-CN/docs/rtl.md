@@ -1,3 +1,8 @@
+---
+title: "阿拉伯语与 RTL（Holool 分支）"
+description: "Holool 分支的继承式 RTL 布局、原生阿拉伯语编辑和 GPUI Fast 集成。"
+---
+
 # 阿拉伯语与 RTL（Holool 分支）
 
 Holool 分支默认使用 [Holool GPUI Fast](https://github.com/holool/gpui-fast)。兼容 crate
