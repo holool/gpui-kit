@@ -49,3 +49,26 @@ virtual_list::tests::vertical_visible_range_and_deferred_scroll_are_preserved
 
 These failures are retained rather than skipped. The fork does not claim a green
 full Kit suite or that this RTL port resolves all upstream Fast integration issues.
+
+## Switch follow-up from gpui-arabic
+
+Reviewed gpui-arabic commit `712cebb80b778bb4e96aee33b5193c1b09a48944`
+(`Make BaseSwitch follow RTL direction`). CE's new fix resolves direction after
+layout for its drag gesture, reverses the drag delta in RTL, and preserves the
+resolved direction between gestures. Kit's existing Base switch supports click
+and keyboard activation, with no drag state or drag threshold API, so this
+follow-up does not copy CE's component or add a new gesture.
+
+The styled Kit switch already resolves its explicit direction or inherits the
+parent direction, and puts the checked thumb at inline end. Its Arabic example
+already supports switching between RTL and LTR. No runtime change or Fast
+engine update is needed for this source commit.
+
+The Fast-backed switch regression now covers inherited direction, both explicit
+overrides, changing the parent and control direction without changing identity,
+removing an override, controlled click/Enter/Space activation, callback order,
+focus, disabled controls, and thumb/label geometry in both states. Reduced
+motion is enabled for deterministic endpoint assertions; this test does not
+exercise animated travel or add drag support. Fast CI runs the entire switch
+test group on macOS, Linux, and Windows. All 10 switch tests pass locally on
+macOS with Rust 1.95 and `gpui-fast` enabled.

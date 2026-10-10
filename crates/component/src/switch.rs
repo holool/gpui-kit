@@ -579,41 +579,127 @@ mod tests {
     }
 
     #[gpui::test]
-    fn inherited_direction_places_checked_thumb_at_inline_end(cx: &mut TestAppContext) {
+    fn direction_changes_preserve_switch_geometry_and_activation(cx: &mut TestAppContext) {
+        use gpui::LayoutDirection::{Ltr, Rtl};
+
         struct DirectionHarness {
-            rtl: bool,
+            parent_direction: gpui::LayoutDirection,
+            own_direction: Option<gpui::LayoutDirection>,
             checked: bool,
+            disabled: bool,
+            changes: Vec<bool>,
         }
         impl Render for DirectionHarness {
-            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
                 div()
+                    .id("direction-parent")
+                    .tab_group()
                     .w(px(160.))
-                    .direction(if self.rtl {
-                        gpui::LayoutDirection::Rtl
-                    } else {
-                        gpui::LayoutDirection::Ltr
-                    })
-                    .child(Switch::new("switch").checked(self.checked).label("التفعيل"))
+                    .direction(self.parent_direction)
+                    .child(
+                        Switch::new("switch")
+                            .when_some(self.own_direction, |this, direction| {
+                                this.direction(direction)
+                            })
+                            .checked(self.checked)
+                            .disabled(self.disabled)
+                            .label("التفعيل")
+                            .on_change(cx.listener(|this, checked: &bool, _, cx| {
+                                this.checked = *checked;
+                                this.changes.push(*checked);
+                                cx.notify();
+                            })),
+                    )
             }
         }
+
+        fn assert_geometry(visual: &mut VisualTestContext, rtl: bool, checked: bool) {
+            visual.update(|window, cx| window.draw(cx).clear(cx));
+            let track = visual.debug_bounds("switch-bar").unwrap();
+            let thumb = visual.debug_bounds("switch-thumb").unwrap();
+            let label = visual.debug_bounds("switch-label").unwrap();
+            let expected = if checked != rtl {
+                track.right() - px(2.) - thumb.size.width
+            } else {
+                track.left() + px(2.)
+            };
+            assert!((thumb.left() - expected).abs() < px(0.1));
+            if rtl {
+                assert!(label.right() <= track.left());
+            } else {
+                assert!(label.left() >= track.right());
+            }
+        }
+
         cx.update(crate::init);
-        for rtl in [false, true] {
-            for checked in [false, true] {
-                let (_, visual) = cx.add_window_view(move |_, _| DirectionHarness { rtl, checked });
-                visual.update(|window, cx| window.draw(cx).clear(cx));
-                let track = visual.debug_bounds("switch-bar").unwrap();
-                let thumb = visual.debug_bounds("switch-thumb").unwrap();
-                let label = visual.debug_bounds("switch-label").unwrap();
-                let expected = if checked != rtl {
-                    track.right() - px(2.) - thumb.size.width
-                } else {
-                    track.left() + px(2.)
-                };
-                assert!((thumb.left() - expected).abs() < px(0.1));
-                if rtl {
-                    assert!(label.right() <= track.left());
-                } else {
-                    assert!(label.left() >= track.right());
+        cx.update(|cx| cx.set_reduce_motion(true));
+        for parent_direction in [Ltr, Rtl] {
+            for own_direction in [None, Some(Ltr), Some(Rtl)] {
+                for checked in [false, true] {
+                    for disabled in [false, true] {
+                        let (view, visual) = cx.add_window_view(move |_, _| DirectionHarness {
+                            parent_direction,
+                            own_direction,
+                            checked,
+                            disabled,
+                            changes: Vec::new(),
+                        });
+                        let direction = own_direction.unwrap_or(parent_direction);
+                        assert_geometry(visual, direction.is_rtl(), checked);
+
+                        let track = visual.debug_bounds("switch-bar").unwrap();
+                        visual.simulate_click(track.center(), Modifiers::none());
+                        activate_key(visual, "enter");
+                        activate_key(visual, "space");
+                        let next = if disabled { checked } else { !checked };
+                        assert_geometry(visual, direction.is_rtl(), next);
+                        visual.update(|window, cx| {
+                            assert_eq!(window.focused(cx).is_some(), !disabled);
+                            let state = view.read(cx);
+                            assert_eq!(state.checked, next);
+                            assert_eq!(
+                                state.changes,
+                                if disabled {
+                                    vec![]
+                                } else {
+                                    vec![!checked, checked, !checked]
+                                }
+                            );
+                        });
+
+                        // Change direction without resetting the switch's identity or value.
+                        let opposite_parent = if parent_direction == Rtl { Ltr } else { Rtl };
+                        view.update(visual, |view, cx| {
+                            view.parent_direction = opposite_parent;
+                            cx.notify();
+                        });
+                        assert_geometry(
+                            visual,
+                            own_direction.unwrap_or(opposite_parent).is_rtl(),
+                            next,
+                        );
+
+                        let opposite = if direction == Rtl { Ltr } else { Rtl };
+                        view.update(visual, |view, cx| {
+                            view.own_direction = Some(opposite);
+                            cx.notify();
+                        });
+                        assert_geometry(visual, opposite.is_rtl(), next);
+                        let track = visual.debug_bounds("switch-bar").unwrap();
+                        visual.simulate_click(track.center(), Modifiers::none());
+                        assert_geometry(visual, opposite.is_rtl(), checked);
+                        visual.update(|_, cx| {
+                            let state = view.read(cx);
+                            assert_eq!(state.checked, checked);
+                            assert_eq!(state.changes.len(), if disabled { 0 } else { 4 });
+                        });
+
+                        view.update(visual, |view, cx| {
+                            view.own_direction = None;
+                            cx.notify();
+                        });
+                        assert_geometry(visual, opposite_parent.is_rtl(), checked);
+                    }
                 }
             }
         }
