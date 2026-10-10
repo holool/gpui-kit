@@ -177,7 +177,7 @@ jobs:
       - name: Test RTL input geometry
         run: cargo test -p gpui-base --features gpui-fast,test-support --locked --lib input::element::tests
       - name: Test RTL switch
-        run: cargo test -p gpui-component --features gpui-fast --locked --lib inherited_direction_places_checked_thumb_at_inline_end
+        run: cargo test -p gpui-component --features gpui-fast --locked --lib switch::tests
       - name: Test WebView
         run: cargo test -p gpui-webview --locked
 
