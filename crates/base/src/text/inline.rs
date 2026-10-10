@@ -1954,6 +1954,7 @@ pub(super) mod test_fonts {
             }
             let metrics = self.font_metrics(BODY_ID);
             LineLayout {
+                fast_bidi: Default::default(),
                 font_size,
                 width: position,
                 ascent: font_size * (metrics.ascent / UNITS_PER_EM),

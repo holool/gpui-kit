@@ -33,6 +33,21 @@ impl From<ShapedLine> for InputLine {
     }
 }
 impl InputLine {
+    pub(crate) fn selection_ranges(&self, range: Range<usize>) -> Vec<Range<Pixels>> {
+        match &self.content {
+            Content::Text(line) => line.selection_ranges(range),
+            Content::Inline(_) => vec![self.x_for_index(range.start)..self.x_for_index(range.end)],
+        }
+    }
+    pub(crate) fn visual_caret(&self, index: usize, right: bool) -> Option<usize> {
+        match &self.content {
+            Content::Text(line) if line.fast_bidi.is_some() => {
+                Some(line.visual_caret(index, right))
+            }
+            _ => None,
+        }
+    }
+
     pub(crate) fn inline(text: SharedString, fragments: Vec<InlineFragment>) -> Self {
         let width = fragments.last().map_or(px(0.), |f| f.x + f.width);
         Self {

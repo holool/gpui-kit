@@ -411,6 +411,7 @@ pub struct InputBaseState<M: InputModeKind> {
     pub(crate) disabled: bool,
     pub(crate) readonly: bool,
     pub(crate) text_align: TextAlign,
+    pub(crate) text_align_explicit: bool,
     pub(super) masked: bool,
     pub(super) clean_on_escape: bool,
     pub(super) submit_on_enter: bool,
@@ -649,7 +650,8 @@ impl<M: InputModeKind> InputBaseState<M> {
     }
 
     pub fn set_text_align(&mut self, text_align: TextAlign, cx: &mut Context<Self>) {
-        if !self.is_single_line() || self.text_align == text_align {
+        self.text_align_explicit = true;
+        if self.text_align == text_align {
             return;
         }
 
@@ -768,6 +770,7 @@ impl<M: InputModeKind> InputBaseState<M> {
             disabled: false,
             readonly: false,
             text_align: TextAlign::Left,
+            text_align_explicit: false,
             masked: false,
             clean_on_escape: false,
             submit_on_enter: false,
@@ -1361,11 +1364,25 @@ impl<M: InputModeKind> InputBaseState<M> {
 
     pub(super) fn select_left(&mut self, _: &SelectLeft, _: &mut Window, cx: &mut Context<Self>) {
         self.undo_manager.break_transaction_coalescing();
-        self.select_all_cursors_to(|s, sel| s.previous_boundary(sel.cursor_offset()), cx);
+        self.select_all_cursors_to_with_affinity(
+            |s, sel| {
+                s.bidi_visual_target(sel.cursor_offset(), false)
+                    .unwrap_or_else(|| (s.previous_boundary(sel.cursor_offset()), false))
+            },
+            false,
+            cx,
+        );
     }
 
     pub(super) fn select_right(&mut self, _: &SelectRight, _: &mut Window, cx: &mut Context<Self>) {
-        self.select_all_cursors_to(|s, sel| s.next_boundary(sel.cursor_offset()), cx);
+        self.select_all_cursors_to_with_affinity(
+            |s, sel| {
+                s.bidi_visual_target(sel.cursor_offset(), true)
+                    .unwrap_or_else(|| (s.next_boundary(sel.cursor_offset()), false))
+            },
+            false,
+            cx,
+        );
     }
 
     pub(super) fn select_up(&mut self, _: &SelectUp, _: &mut Window, cx: &mut Context<Self>) {
@@ -4484,9 +4501,13 @@ impl<M: InputModeKind> EntityInputHandler for InputBaseState<M> {
         end_origin.y = start_origin.y;
 
         Some(Bounds::from_corners(
-            bounds.origin + line_number_origin + start_origin,
-            // + line_height for show IME panel under the cursor line.
-            bounds.origin + line_number_origin + point(end_origin.x, end_origin.y + line_height),
+            bounds.origin
+                + line_number_origin
+                + point(start_origin.x.min(end_origin.x), start_origin.y),
+            // RTL ranges can progress toward the left. Native IME rectangles need a positive width.
+            bounds.origin
+                + line_number_origin
+                + point(start_origin.x.max(end_origin.x), end_origin.y + line_height),
         ))
     }
 

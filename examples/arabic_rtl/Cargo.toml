@@ -1,0 +1,11 @@
+[package]
+name = "arabic_rtl"
+version = "0.7.1"
+publish = false
+edition.workspace = true
+
+[dependencies]
+gpui-kit = { workspace = true, features = ["gpui-fast"] }
+
+[lints]
+workspace = true
