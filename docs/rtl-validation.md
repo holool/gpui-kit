@@ -10,6 +10,12 @@ physical touch devices still need device QA.
 - Kit input-element regression group: 40 tests (including native Arabic,
   placeholders, decoration ranges, and newline navigation) pass as part of Base.
 - Kit switches: 10 passed, including both states in both directions.
+- Kit facade, UI integrations, and doctests: 382 passed. The Tig example builds.
+- Documentation: full site build, 9 documentation tests, 15 metadata tests,
+  and 3 internal-link tests pass.
+- Engine CI passes on macOS, Linux, and Windows, including lint/upstream checks.
+  Kit keeps the exact published Kit-aware macro snapshot; runtime crates share
+  the pinned Fast commit. Procedural macros carry no runtime types.
 - Native CoreText shaping/wrapping, X11 contact tracking, Windows cross-check,
   Arabic example build, GPUI clippy, and Fast upstream-hook checks are covered.
 - Strict Kit clippy reports two existing `nonminimal_bool` expressions in
