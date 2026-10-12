@@ -5873,6 +5873,14 @@ mod tests {
             }))
         });
         cx.run_until_parked();
+        // Deliver the initial measurement/settling frame before checking idle reuse.
+        cx.update_window(window.into(), |_, window, cx| {
+            window.simulate_next_frame(cx);
+            window.refresh();
+            window.draw(cx).clear(cx);
+        })
+        .unwrap();
+        cx.run_until_parked();
         let before = renders.get();
         assert!(before > 0);
         for _ in 0..60 {

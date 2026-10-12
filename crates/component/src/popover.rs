@@ -601,8 +601,14 @@ mod tests {
             origin: point(px(200.), px(200.)),
             arrow: false,
         });
-        window.update(|window, cx| window.draw(cx).clear(cx));
-        window.update(|window, cx| window.draw(cx).clear(cx));
+        window.update(|window, cx| {
+            window.simulate_next_frame(cx);
+            window.draw(cx).clear(cx);
+        });
+        window.update(|window, cx| {
+            window.simulate_next_frame(cx);
+            window.draw(cx).clear(cx);
+        });
         // Legacy TopLeft means below the trigger, including the default 0.25rem gap.
         let legacy = window.debug_bounds("positioned-content").unwrap();
         assert_eq!(legacy.left(), px(200.));
@@ -624,6 +630,7 @@ mod tests {
                     view.offset = Some(px(12.));
                     cx.notify();
                 });
+                window.simulate_next_frame(cx);
                 window.draw(cx).clear(cx);
             });
             assert_eq!(
@@ -638,6 +645,7 @@ mod tests {
                 view.origin = point(px(260.), px(240.));
                 cx.notify();
             });
+            window.simulate_next_frame(cx);
             window.draw(cx).clear(cx);
         });
         assert_eq!(
@@ -687,8 +695,14 @@ mod tests {
     fn trigger_style_is_applied_to_the_trigger_container(cx: &mut gpui::TestAppContext) {
         cx.update(crate::init);
         let (view, window) = cx.add_window_view(|_, _| TriggerStyleHarness { styled: false });
-        window.update(|window, cx| window.draw(cx).clear(cx));
-        window.update(|window, cx| window.draw(cx).clear(cx));
+        window.update(|window, cx| {
+            window.simulate_next_frame(cx);
+            window.draw(cx).clear(cx);
+        });
+        window.update(|window, cx| {
+            window.simulate_next_frame(cx);
+            window.draw(cx).clear(cx);
+        });
         // Unstyled: the container wraps the 40px trigger, so the content's right
         // edge meets the trigger's right edge at 140px.
         assert_eq!(
@@ -701,9 +715,13 @@ mod tests {
                 view.styled = true;
                 cx.notify();
             });
+            window.simulate_next_frame(cx);
             window.draw(cx).clear(cx);
         });
-        window.update(|window, cx| window.draw(cx).clear(cx));
+        window.update(|window, cx| {
+            window.simulate_next_frame(cx);
+            window.draw(cx).clear(cx);
+        });
         // `w_full` stretches the container across the 200px row, and the popup
         // follows the container's right edge at 300px.
         assert_eq!(
@@ -721,8 +739,14 @@ mod tests {
             origin: point(px(200.), px(8.)),
             arrow: true,
         });
-        window.update(|window, cx| window.draw(cx).clear(cx));
-        window.update(|window, cx| window.draw(cx).clear(cx));
+        window.update(|window, cx| {
+            window.simulate_next_frame(cx);
+            window.draw(cx).clear(cx);
+        });
+        window.update(|window, cx| {
+            window.simulate_next_frame(cx);
+            window.draw(cx).clear(cx);
+        });
         // Bottom edge 48 + tip gap 12 + arrow depth 6.
         assert_eq!(
             window.debug_bounds("positioned-content").unwrap().origin,
@@ -734,6 +758,7 @@ mod tests {
                 view.arrow = false;
                 cx.notify();
             });
+            window.simulate_next_frame(cx);
             window.draw(cx).clear(cx);
         });
         assert_eq!(
@@ -751,8 +776,14 @@ mod tests {
             origin: point(px(200.), px(8.)),
             arrow: true,
         });
-        window.update(|window, cx| window.draw(cx).clear(cx));
-        window.update(|window, cx| window.draw(cx).clear(cx));
+        window.update(|window, cx| {
+            window.simulate_next_frame(cx);
+            window.draw(cx).clear(cx);
+        });
+        window.update(|window, cx| {
+            window.simulate_next_frame(cx);
+            window.draw(cx).clear(cx);
+        });
         // Clamp to the window margin instead of flipping below the trigger.
         assert_eq!(
             window.debug_bounds("positioned-content").unwrap().top(),
@@ -901,14 +932,23 @@ mod tests {
             let changes = changes.clone();
             move |_, _| PopoverHarness { changes }
         });
-        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.update(|window, cx| {
+            window.simulate_next_frame(cx);
+            window.draw(cx).clear(cx);
+        });
 
         cx.simulate_click(point(px(20.), px(20.)), Default::default());
-        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.update(|window, cx| {
+            window.simulate_next_frame(cx);
+            window.draw(cx).clear(cx);
+        });
         assert!(cx.debug_bounds("runtime-popover-content").is_some());
 
         cx.simulate_click(point(px(300.), px(300.)), Default::default());
-        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.update(|window, cx| {
+            window.simulate_next_frame(cx);
+            window.draw(cx).clear(cx);
+        });
         assert!(cx.debug_bounds("runtime-popover-content").is_none());
         // A change callback reports state transitions, not redundant dismissal
         // requests. The base host may see both paths, but only the first closes.
@@ -938,8 +978,14 @@ mod tests {
             init(cx);
         });
         let (_, cx) = cx.add_window_view(|_, _| DefaultOpenHarness);
-        cx.update(|window, cx| window.draw(cx).clear(cx));
-        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.update(|window, cx| {
+            window.simulate_next_frame(cx);
+            window.draw(cx).clear(cx);
+        });
+        cx.update(|window, cx| {
+            window.simulate_next_frame(cx);
+            window.draw(cx).clear(cx);
+        });
         assert!(cx.debug_bounds("default-open-content").is_some());
     }
 
@@ -969,14 +1015,20 @@ mod tests {
         cx.update(crate::init);
         let (view, window) = cx.add_window_view(|_, _| Harness { open: true });
 
-        window.update(|window, cx| window.draw(cx).clear(cx));
+        window.update(|window, cx| {
+            window.simulate_next_frame(cx);
+            window.draw(cx).clear(cx);
+        });
         let opening = window.debug_bounds("surface").unwrap().origin;
 
         // The animation runs off the wall clock, so settling is waited out
         // rather than stepped. Several times the duration leaves room for a
         // loaded machine.
         std::thread::sleep(DROPDOWN_ENTER_DURATION * 4);
-        window.update(|window, cx| window.draw(cx).clear(cx));
+        window.update(|window, cx| {
+            window.simulate_next_frame(cx);
+            window.draw(cx).clear(cx);
+        });
         let settled = window.debug_bounds("surface").unwrap().origin;
 
         assert!(
@@ -990,6 +1042,7 @@ mod tests {
                     this.open = open;
                     cx.notify();
                 });
+                window.simulate_next_frame(cx);
                 window.draw(cx).clear(cx);
             });
         }

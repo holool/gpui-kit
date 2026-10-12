@@ -155,8 +155,8 @@ fn invalid_errors(cx: &mut TestAppContext, expression: &str) -> Vec<String> {
 import {{ ScrollbarHandle, Scrollbar }} from "gpui-component";
 export default class App extends View {{ init() {{ this.h = ScrollbarHandle(); }} render() {{ return {expression}; }} }}"#
     );
-    let (mut context, _view, _app) = mount(cx, &source);
     scroll::test_probe::take_errors();
+    let (mut context, _view, _app) = mount(cx, &source);
     draw(&mut context);
     scroll::test_probe::take_errors()
 }

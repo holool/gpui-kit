@@ -466,14 +466,23 @@ mod tests {
                 default_open: false,
             }
         });
-        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.update(|window, cx| {
+            window.simulate_next_frame(cx);
+            window.draw(cx).clear(cx);
+        });
 
         cx.simulate_click(point(px(20.), px(10.)), Default::default());
-        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.update(|window, cx| {
+            window.simulate_next_frame(cx);
+            window.draw(cx).clear(cx);
+        });
         assert!(cx.debug_bounds("base-popover-content").is_some());
 
         cx.simulate_click(point(px(300.), px(300.)), Default::default());
-        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.update(|window, cx| {
+            window.simulate_next_frame(cx);
+            window.draw(cx).clear(cx);
+        });
         assert!(cx.debug_bounds("base-popover-content").is_none());
         assert_eq!(&*changes.borrow(), &[true, false]);
     }
@@ -485,8 +494,14 @@ mod tests {
             changes: Rc::new(RefCell::new(Vec::new())),
             default_open: true,
         });
-        cx.update(|window, cx| window.draw(cx).clear(cx));
-        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.update(|window, cx| {
+            window.simulate_next_frame(cx);
+            window.draw(cx).clear(cx);
+        });
+        cx.update(|window, cx| {
+            window.simulate_next_frame(cx);
+            window.draw(cx).clear(cx);
+        });
         assert!(cx.debug_bounds("base-popover-content").is_some());
     }
 
@@ -552,11 +567,17 @@ mod tests {
             let calls = calls.clone();
             move |_, _| RecordingTriggerHarness { calls }
         });
-        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.update(|window, cx| {
+            window.simulate_next_frame(cx);
+            window.draw(cx).clear(cx);
+        });
         calls.borrow_mut().clear();
 
         cx.simulate_click(point(px(20.), px(10.)), Default::default());
-        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.update(|window, cx| {
+            window.simulate_next_frame(cx);
+            window.draw(cx).clear(cx);
+        });
 
         let calls = calls.borrow();
         assert!(
@@ -575,14 +596,20 @@ mod tests {
         let (view, cx) = cx.add_window_view(|_, cx| KeyboardPopoverHarness {
             trigger_focus: cx.focus_handle(),
         });
-        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.update(|window, cx| {
+            window.simulate_next_frame(cx);
+            window.draw(cx).clear(cx);
+        });
 
         cx.update(|window, cx| {
             let focus = view.read(cx).trigger_focus.clone();
             focus.focus(window, cx);
         });
         cx.simulate_keystrokes("enter");
-        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.update(|window, cx| {
+            window.simulate_next_frame(cx);
+            window.draw(cx).clear(cx);
+        });
 
         assert!(cx.debug_bounds("keyboard-popover-content").is_some());
     }

@@ -825,7 +825,11 @@ mod tests {
         assert!(initial_range.end < item_sizes.len());
 
         scroll_handle.scroll_to_item(12, ScrollStrategy::Top);
-        cx.update(|window, cx| window.draw(cx).clear(cx));
+        // The handle is external retained data; its owner requests the refresh.
+        cx.update(|window, cx| {
+            window.refresh();
+            window.draw(cx).clear(cx);
+        });
         let scrolled_range = visible_ranges.borrow().last().cloned().unwrap();
         assert!(scrolled_range.contains(&12));
         match axis {

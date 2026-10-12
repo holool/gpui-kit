@@ -139,6 +139,15 @@ impl Transition {
         self
     }
 
+    fn scaled_duration(&self, factor: f32) -> Duration {
+        // Preserve exact deadlines instead of rounding full durations through f32.
+        if factor == 1.0 {
+            self.duration
+        } else {
+            self.duration.mul_f64(f64::from(factor))
+        }
+    }
+
     fn sample(&self, progress: f32) -> f32 {
         self.easing.sample(progress)
     }
@@ -331,7 +340,7 @@ where
         } else {
             1.0
         };
-        let duration = policy.duration.mul_f32(reversing_factor);
+        let duration = policy.scaled_duration(reversing_factor);
         state.update(cx, |state, _| {
             state.from = sampled.clone();
             state.target = target.clone();

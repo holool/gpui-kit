@@ -2462,7 +2462,7 @@ mod tests {
 
             let mut markers = shaped_lines
                 .into_iter()
-                .filter(|line| line.len() <= 3 && line.ends_with('.'))
+                .filter(|line| line.len() <= 3 && line.ends_with('.') && line != ".")
                 .collect::<Vec<_>>();
             markers.dedup();
             markers

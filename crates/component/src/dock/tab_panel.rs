@@ -960,7 +960,10 @@ mod tests {
         });
         cx.run_until_parked();
         log.borrow_mut().draggable.clear();
-        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.update(|window, cx| {
+            window.refresh();
+            window.draw(cx).clear(cx);
+        });
 
         assert_eq!(
             log.borrow().draggable,
@@ -988,7 +991,10 @@ mod tests {
         });
         cx.run_until_parked();
         log.borrow_mut().draggable.clear();
-        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.update(|window, cx| {
+            window.refresh();
+            window.draw(cx).clear(cx);
+        });
 
         assert_eq!(
             log.borrow().draggable,

@@ -1307,6 +1307,11 @@ impl WindowSelectionState {
     /// the registration it last reported, which still describes what is on
     /// screen; only one whose element GPUI has dropped is swept.
     pub fn finish_frame(&mut self, cx: &mut App) -> Vec<ClearHandler> {
+        // The lifecycle element can be replayed from a retained frame. Reset
+        // here too so a partially repainted TextView keeps its logical order.
+        if let Some(global) = cx.try_global::<GlobalState>() {
+            global.begin_selection_frame();
+        }
         self.finish_frame_scheduled.set(false);
         let generation = self.frame_generation.get();
         let stale = self
@@ -1399,6 +1404,11 @@ impl WindowSelectionState {
             !gone(registration) && registration.participant.upgrade().is_some()
         });
         drop(participants);
+        // The lifecycle element can be replayed from a retained frame. Reset
+        // here too so a partially repainted TextView keeps its logical order.
+        if let Some(global) = cx.try_global::<GlobalState>() {
+            global.begin_selection_frame();
+        }
         self.finish_frame_scheduled.set(false);
         self.frame_generation.set(generation.wrapping_add(1));
         true
@@ -3304,6 +3314,25 @@ mod tests {
                 cx,
             );
         }
+    }
+
+    #[gpui::test]
+    fn selection_order_restarts_when_the_lifecycle_element_is_cached(cx: &mut TestAppContext) {
+        cx.update(|cx| {
+            GlobalState::init(cx);
+            let mut state = WindowSelectionState::default();
+            for selecting in [false, true] {
+                state.is_selecting = selecting;
+                let global = GlobalState::global(cx);
+                global.begin_selection_frame();
+                assert_eq!(global.next_selection_document_order(), 1);
+                assert_eq!(global.next_selection_document_order(), 2);
+                if !state.finish_frame_quietly(cx) {
+                    state.finish_frame(cx);
+                }
+                assert_eq!(GlobalState::global(cx).next_selection_document_order(), 1);
+            }
+        });
     }
 
     fn laid_out_runs(texts: &[&str], cx: &mut TestAppContext) -> Vec<(SharedString, TextLayout)> {

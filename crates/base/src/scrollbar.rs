@@ -2776,6 +2776,9 @@ mod tests {
                                 Modifiers::default(),
                             );
                         }
+                        // Drag rendering is throttled; deliver the queued repaint.
+                        cx.executor().advance_clock(Duration::from_millis(100));
+                        cx.run_until_parked();
                         cx.update(|window, cx| window.draw(cx).clear(cx));
                         if delta == 0. {
                             reference_offset = axis_value(handle.offset());
