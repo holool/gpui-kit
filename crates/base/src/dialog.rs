@@ -6,9 +6,9 @@ use std::{
 
 use gpui::{
     AnyElement, App, ClickEvent, FocusHandle, InteractiveElement as _, IntoElement, KeyBinding,
-    MouseButton, ParentElement, Pixels, RenderOnce, Role, StatefulInteractiveElement as _,
-    StyleRefinement, Styled, Window, anchored, deferred, div, point, prelude::FluentBuilder as _,
-    px,
+    MouseButton, ParentElement, Pixels, RenderOnce, Role, SharedString,
+    StatefulInteractiveElement as _, StyleRefinement, Styled, Window, anchored, deferred, div,
+    point, prelude::FluentBuilder as _, px,
 };
 use smallvec::SmallVec;
 
@@ -125,6 +125,7 @@ pub struct Dialog {
     style: StyleRefinement,
     focus: FocusHandle,
     role: Role,
+    label: Option<SharedString>,
     layer: usize,
     keyboard: bool,
     overlay_closable: bool,
@@ -426,6 +427,7 @@ impl Dialog {
             style: StyleRefinement::default(),
             focus: cx.focus_handle(),
             role: Role::Dialog,
+            label: None,
             layer: 0,
             keyboard: true,
             overlay_closable: true,
@@ -484,6 +486,12 @@ impl Dialog {
     }
     pub fn dismiss_below_y(mut self, value: Pixels) -> Self {
         self.dismiss_below_y = value;
+        self
+    }
+    /// Names the dialog for assistive technologies. Pass the text its
+    /// [`DialogTitle`] shows, so the dialog is announced by its title.
+    pub fn accessibility_label(mut self, label: impl Into<SharedString>) -> Self {
+        self.label = Some(label.into());
         self
     }
     pub(crate) fn role(mut self, role: Role) -> Self {
@@ -560,7 +568,7 @@ impl RenderOnce for Dialog {
                     .flex()
                     .items_center()
                     .justify_center()
-                    .role(self.role)
+                    .map(|host| accessible_host(host, self.role, self.label))
                     .track_focus(&self.focus)
                     .focus_trap(format!("dialog-{}", self.layer), &self.focus)
                     .when(self.keyboard, |this| this.key_context(CONTEXT))
@@ -643,6 +651,22 @@ impl RenderOnce for Dialog {
         .with_priority(10 + self.layer)
         .into_any_element()
     }
+}
+
+/// The host's accessibility node: its role and name, and, on GPUI Fast, the
+/// modal state. The host traps focus over a backdrop, so the content behind
+/// it is inert.
+fn accessible_host<E: gpui::StatefulInteractiveElement + gpui::prelude::FluentBuilder>(
+    host: E,
+    role: Role,
+    label: Option<SharedString>,
+) -> E {
+    let host = host
+        .role(role)
+        .when_some(label, |host, label| host.aria_label(label));
+    #[cfg(feature = "gpui-fast")]
+    let host = gpui::AriaStateExt::aria_modal(host, true);
+    host
 }
 
 #[cfg(test)]
@@ -752,6 +776,21 @@ mod tests {
         cx.run_until_parked();
         assert_eq!(attempts.get(), 2);
         assert!(!handle.is_open(), "Space uses the same cancel decision");
+    }
+
+    #[test]
+    fn the_host_is_a_named_modal_dialog() {
+        use gpui::{Element as _, accesskit};
+        let host = accessible_host(div().id("host"), Role::Dialog, Some("Pay".into()));
+        let mut node = accesskit::Node::new(Role::Dialog);
+        host.write_a11y_info(&mut node);
+        assert_eq!(
+            node.label(),
+            Some("Pay"),
+            "the dialog takes its title as its name"
+        );
+        #[cfg(feature = "gpui-fast")]
+        assert!(node.is_modal(), "the content behind a dialog is inert");
     }
 
     struct TriggerHarness {
