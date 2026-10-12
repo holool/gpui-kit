@@ -470,6 +470,22 @@ fn selection_range_for_run(
         return None;
     }
 
+    // Endpoints in one run describe a logical text range. A physical left-to-right
+    // band cannot recover that range on the first and last rows of wrapped RTL text.
+    if run.bounds.contains(&selection_start) && run.bounds.contains(&selection_end) {
+        let start = run
+            .layout
+            .index_for_position(selection_start)
+            .unwrap_or_else(|offset| offset);
+        let end = run
+            .layout
+            .index_for_position(selection_end)
+            .unwrap_or_else(|offset| offset);
+        if start != end {
+            return Some(start.min(end)..start.max(end));
+        }
+    }
+
     let line_height = run.layout.line_height();
     // Each character is tested with its row's top and height, so a run whose
     // rows all miss the band, or all lie strictly inside it with no endpoint
@@ -2466,8 +2482,22 @@ impl TextSelection {
     pub fn is_selectable_at(position: Point<Pixels>, window: &Window, cx: &mut App) -> bool {
         live_text_selection_state(window, cx).is_some_and(|state| {
             state.update(cx, |state, cx| {
-                !state.touch.covers(position)
-                    && state.endpoint(position, Some(window), cx).inside_text
+                if state.touch.covers(position) {
+                    return false;
+                }
+                let endpoint = state.endpoint(position, Some(window), cx);
+                if !endpoint.inside_text {
+                    return false;
+                }
+                let Some(participant) = endpoint.participant.and_then(|entity| entity.upgrade())
+                else {
+                    return false;
+                };
+                let participant = participant.read(cx);
+                participant.runs.borrow().iter().any(|run| {
+                    run.bounds.contains(&position)
+                        && run.layout.index_for_position(position).is_ok()
+                })
             })
         })
     }
@@ -3658,6 +3688,115 @@ mod tests {
 
             assert_eq!(selection_state.selected_text(cx), "tw\nne");
         });
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn native_wrapped_arabic_selection_preserves_first_to_last_row_text() {
+        use gpui::TestDispatcher;
+
+        let mut cx = TestAppContext::build_with_text_system(
+            TestDispatcher::new(0),
+            None,
+            gpui_fast_macos::text_system_for_tests(),
+        );
+        cx.update(crate::init);
+        struct WrappedArabicLayout {
+            text: SharedString,
+            layout: Option<TextLayout>,
+        }
+        impl Render for WrappedArabicLayout {
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                let text = StyledText::new(self.text.clone());
+                self.layout = Some(text.layout().clone());
+                div().w(px(180.)).text_size(px(20.)).child(text)
+            }
+        }
+        let text = SharedString::from("محمد علي محمد علي محمد علي محمد علي");
+        let view = cx.add_window({
+            let text = text.clone();
+            move |_, _| WrappedArabicLayout { text, layout: None }
+        });
+        cx.update_window(*view, |_, window, cx| {
+            let _ = window.draw(cx);
+        })
+        .unwrap();
+        let layout = cx.update(|cx| view.read(cx).unwrap().layout.clone().unwrap());
+        let run = text_run(0, text.clone(), layout.clone());
+        let start = layout.position_for_index(0).unwrap();
+        let end = layout.position_for_index(text.len()).unwrap();
+        assert!(end.y > start.y, "fixture must span wrapped rows");
+        let projection = project_ranges(Some(plain_snapshot(start, end)), &[run]);
+        assert_eq!(projection.ranges(), &[Some(0..text.len())]);
+        assert_eq!(
+            &text[projection.ranges()[0].clone().unwrap()],
+            text.as_ref()
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn native_glyph_hit_probe_rejects_wrapped_row_padding() {
+        use crate::SelectableText;
+        struct GlyphHitSurface {
+            selection: TextSelectionHandle,
+        }
+        impl Render for GlyphHitSurface {
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                div()
+                    .w(px(180.))
+                    .text_size(px(20.))
+                    .child(TextSelectionLayer)
+                    .child(SelectableText::with_handle(
+                        "glyph-hit",
+                        self.selection.clone(),
+                        "محمد علي محمد علي محمد علي محمد علي",
+                    ))
+            }
+        }
+        let mut cx = TestAppContext::build_with_text_system(
+            gpui::TestDispatcher::new(0),
+            None,
+            gpui_fast_macos::text_system_for_tests(),
+        );
+        cx.update(crate::init);
+        let selection = cx.update(|cx| TextSelectionHandle::new("", cx));
+        let view = cx.add_window({
+            let selection = selection.clone();
+            move |_, _| GlyphHitSurface { selection }
+        });
+        cx.update_window(*view, |_, window, cx| {
+            let _ = window.draw(cx);
+            let (glyph_point, padding_point) = {
+                let participant = selection.0.read(cx);
+                let runs = participant.runs.borrow();
+                let run = &runs[0];
+                let mut glyph = None;
+                let mut padding = None;
+                for y in 0..f32::from(run.bounds.size.height) as usize {
+                    for x in 0..f32::from(run.bounds.size.width) as usize {
+                        let p = run.bounds.origin + point(px(x as f32 + 0.5), px(y as f32 + 0.5));
+                        if run.layout.index_for_position(p).is_ok() {
+                            glyph.get_or_insert(p);
+                        } else {
+                            padding.get_or_insert(p);
+                        }
+                    }
+                }
+                (
+                    glyph.expect("native run has glyph area"),
+                    padding.expect("wrapped row has padding"),
+                )
+            };
+            window.simulate_mouse_move(glyph_point, cx);
+            assert!(TextSelection::is_selectable_at(glyph_point, window, cx));
+            window.simulate_mouse_move(padding_point, cx);
+            assert!(
+                !TextSelection::is_selectable_at(padding_point, window, cx),
+                "text hit probe must not claim the blank part of a wrapped row"
+            );
+        })
+        .unwrap();
     }
 
     #[gpui::test]

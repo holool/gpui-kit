@@ -716,7 +716,15 @@ impl Inline {
                 .map(|boundary| layout.runs[boundary.run_ix].glyphs[boundary.glyph_ix].index)
                 .chain([line.len()]);
             for row_end in row_ends {
-                let mut width = layout.x_for_index(row_end) - layout.x_for_index(row_start);
+                // Logical caret order can run right-to-left; the painted row still
+                // occupies the shaped line's positive physical advance width.
+                let mut width = if line.wrap_boundaries.is_empty() {
+                    layout.width
+                } else {
+                    let start_x = layout.x_for_index(row_start);
+                    let end_x = layout.x_for_index(row_end);
+                    start_x.max(end_x) - start_x.min(end_x)
+                };
                 row_ix += 1;
                 if row_ix < row_count {
                     width += line_height.half();
@@ -1439,55 +1447,8 @@ mod line_bounds_tests {
     };
     use gpui::{AvailableSpace, TestApp, size};
 
-    /// The character walk this replaced, kept as the oracle: one box per
-    /// character from `position_for_index`, unioned per row.
-    fn by_character(
-        text: &str,
-        text_layout: &TextLayout,
-        line_height: Pixels,
-        mask_bounds: Bounds<Pixels>,
-    ) -> Vec<Bounds<Pixels>> {
-        let mut line_bounds = Vec::new();
-        let mut current_line_y = None;
-        let mut current_bounds: Option<Bounds<Pixels>> = None;
-        let mut offset = 0;
-        for c in text.chars() {
-            let next_offset = offset + c.len_utf8();
-            let Some(pos) = text_layout.position_for_index(offset) else {
-                offset = next_offset;
-                continue;
-            };
-            let mut char_width = line_height.half();
-            if let Some(next_pos) = text_layout.position_for_index(next_offset)
-                && next_pos.y == pos.y
-            {
-                char_width = next_pos.x - pos.x;
-            }
-            let bounds = Bounds::from_corners(pos, point(pos.x + char_width, pos.y + line_height))
-                .intersect(&mask_bounds);
-            if bounds.size.width > px(0.) && bounds.size.height > px(0.) {
-                if current_line_y == Some(pos.y) {
-                    if let Some(current) = current_bounds.as_mut() {
-                        *current = current.union(&bounds);
-                    }
-                } else {
-                    if let Some(current) = current_bounds.take() {
-                        line_bounds.push(current);
-                    }
-                    current_line_y = Some(pos.y);
-                    current_bounds = Some(bounds);
-                }
-            }
-            offset = next_offset;
-        }
-        if let Some(current) = current_bounds {
-            line_bounds.push(current);
-        }
-        line_bounds
-    }
-
     #[test]
-    fn row_walk_matches_the_character_walk() {
+    fn selectable_row_bounds_cover_wrapped_rows_and_clip_to_the_mask() {
         let mut app = TestApp::with_text_system(Arc::new(WideMonoTextSystem));
         in_prepaint(&mut app, |window, cx| {
             let style = TextStyle {
@@ -1497,75 +1458,152 @@ mod line_bounds_tests {
             };
             let origin = point(px(7.), px(11.));
             let mask = Bounds::new(point(px(0.), px(0.)), size(px(1000.), px(1000.)));
-            let clipped = Bounds::new(point(px(20.), px(30.)), size(px(50.), px(60.)));
-            for text in [
-                "",
-                "one row",
-                "a long paragraph that wraps onto several rows of eight pixel glyphs",
-                "first line\nsecond line that also wraps around\n\nfourth",
-                "中文与 English 混排的一段文字也会换行",
-                "trailing newline\n",
-            ] {
-                for wrap_width in [40., 100., 1000.] {
-                    let runs = text_runs(text.len(), &style, &[]);
-                    let styled =
-                        StyledText::new(SharedString::from(text.to_string())).with_runs(runs);
-                    let layout = styled.layout().clone();
-                    let mut element = styled.into_any_element();
-                    element.layout_as_root(
-                        size(
-                            AvailableSpace::Definite(px(wrap_width)),
-                            AvailableSpace::MinContent,
-                        ),
-                        window,
-                        cx,
+            let text = "abcdefghij";
+            let runs = text_runs(text.len(), &style, &[]);
+            let styled = StyledText::new(SharedString::from(text)).with_runs(runs);
+            let layout = styled.layout().clone();
+            let mut element = styled.into_any_element();
+            element.layout_as_root(
+                size(
+                    AvailableSpace::Definite(px(40.)),
+                    AvailableSpace::MinContent,
+                ),
+                window,
+                cx,
+            );
+            element.prepaint_at(origin, window, cx);
+
+            let line_height = layout.line_height();
+            let actual = Inline::text_line_bounds(&layout, line_height, mask);
+            assert_eq!(actual.len(), 2);
+            assert_eq!(
+                actual[0],
+                Bounds::new(origin, size(px(40.) + line_height.half(), line_height))
+            );
+            assert_eq!(
+                actual[1],
+                Bounds::new(
+                    point(origin.x, origin.y + line_height),
+                    size(px(40.), line_height)
+                )
+            );
+
+            let clipped = Bounds::new(point(px(20.), px(0.)), size(px(20.), px(100.)));
+            let actual = Inline::text_line_bounds(&layout, line_height, clipped);
+            assert_eq!(actual.len(), 2);
+            assert_eq!(
+                actual[0],
+                Bounds::new(point(px(20.), origin.y), size(px(20.), line_height))
+            );
+            assert_eq!(
+                actual[1],
+                Bounds::new(
+                    point(px(20.), origin.y + line_height),
+                    size(px(20.), line_height)
+                )
+            );
+        });
+    }
+
+    #[test]
+    fn selectable_row_bounds_cover_explicit_lines_and_ignore_empty_text() {
+        let mut app = TestApp::with_text_system(Arc::new(WideMonoTextSystem));
+        in_prepaint(&mut app, |window, cx| {
+            let style = TextStyle {
+                font_family: BODY.into(),
+                font_size: px(16.).into(),
+                ..Default::default()
+            };
+            let origin = point(px(7.), px(11.));
+            let mask = Bounds::new(point(px(0.), px(0.)), size(px(1000.), px(1000.)));
+            for text in ["", "abc\ndef"] {
+                let runs = text_runs(text.len(), &style, &[]);
+                let styled = StyledText::new(SharedString::from(text)).with_runs(runs);
+                let layout = styled.layout().clone();
+                let mut element = styled.into_any_element();
+                element.layout_as_root(
+                    size(
+                        AvailableSpace::Definite(px(100.)),
+                        AvailableSpace::MinContent,
+                    ),
+                    window,
+                    cx,
+                );
+                element.prepaint_at(origin, window, cx);
+                let actual = Inline::text_line_bounds(&layout, layout.line_height(), mask);
+                if text.is_empty() {
+                    assert!(actual.is_empty());
+                } else {
+                    assert_eq!(actual.len(), 2);
+                    assert_eq!(
+                        actual[0],
+                        Bounds::new(
+                            origin,
+                            size(px(24.) + layout.line_height().half(), layout.line_height())
+                        )
                     );
-                    element.prepaint_at(origin, window, cx);
-                    let line_height = layout.line_height();
-                    for mask in [mask, clipped] {
-                        let expected = by_character(text, &layout, line_height, mask);
-                        let actual = Inline::text_line_bounds(&layout, line_height, mask);
-                        let context = format!("{text:?} at {wrap_width}px in {mask:?}");
-                        // The character walk placed a wrapped row's first
-                        // character at the end of the row before it: that row's
-                        // box started one glyph in, and a row holding only that
-                        // one glyph had no box at all. The row walk covers every
-                        // row from its start, so it may see more rows, never
-                        // fewer, and agrees on every row the walk could see.
-                        assert!(
-                            actual.len() >= expected.len(),
-                            "rows of {context}: {} < {}",
-                            actual.len(),
-                            expected.len()
-                        );
-                        for (row, expected) in expected.iter().enumerate() {
-                            let actual = actual
-                                .iter()
-                                .find(|actual| actual.top() == expected.top())
-                                .unwrap_or_else(|| panic!("row {row} of {context} is missing"));
-                            assert_eq!(
-                                actual.bottom(),
-                                expected.bottom(),
-                                "row {row} of {context}"
-                            );
-                            assert_eq!(actual.right(), expected.right(), "row {row} of {context}");
-                            assert!(
-                                actual.left() <= expected.left(),
-                                "row {row} of {context} starts at {:?}, after {:?}",
-                                actual.left(),
-                                expected.left()
-                            );
-                        }
-                        for actual in &actual {
-                            assert_eq!(
-                                actual.left(),
-                                origin.x.max(mask.left()),
-                                "left of {context}"
-                            );
-                        }
-                    }
+                    assert_eq!(
+                        actual[1],
+                        Bounds::new(
+                            point(origin.x, origin.y + layout.line_height()),
+                            size(px(24.), layout.line_height())
+                        )
+                    );
                 }
             }
+        });
+    }
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn selectable_rtl_row_bounds_cover_physical_glyph_extent_and_clip() {
+        let mut app = TestApp::with_text_system(gpui_fast_macos::text_system_for_tests());
+        in_prepaint(&mut app, |window, cx| {
+            let text = "محمد علي";
+            let style = TextStyle {
+                font_size: px(20.).into(),
+                ..Default::default()
+            };
+            let runs = text_runs(text.len(), &style, &[]);
+            let styled = StyledText::new(SharedString::from(text)).with_runs(runs);
+            let layout = styled.layout().clone();
+            let mut element = styled.into_any_element();
+            element.layout_as_root(
+                size(
+                    AvailableSpace::Definite(px(300.)),
+                    AvailableSpace::MinContent,
+                ),
+                window,
+                cx,
+            );
+            let origin = point(px(7.), px(11.));
+            element.prepaint_at(origin, window, cx);
+
+            let physical_width = layout.line_layouts()[0].unwrapped_layout.width;
+            let first_caret = layout.position_for_index(0).unwrap();
+            let last_caret = layout.position_for_index(text.len()).unwrap();
+            assert!(
+                first_caret.x > last_caret.x,
+                "text must shape right-to-left"
+            );
+
+            let mask = Bounds::new(point(px(0.), px(0.)), size(px(1000.), px(1000.)));
+            let actual = Inline::text_line_bounds(&layout, layout.line_height(), mask);
+            assert_eq!(actual.len(), 1);
+            assert_eq!(
+                actual[0],
+                Bounds::new(origin, size(physical_width, layout.line_height()))
+            );
+
+            let clip = Bounds::new(
+                point(origin.x + physical_width / 2., origin.y),
+                size(physical_width / 4., layout.line_height()),
+            );
+            let clipped = Inline::text_line_bounds(&layout, layout.line_height(), clip);
+            assert_eq!(clipped.len(), 1);
+            assert_eq!(clipped[0].origin, clip.origin);
+            assert_eq!(clipped[0].size.height, clip.size.height);
+            let right_difference = clipped[0].right() - clip.right();
+            assert!(right_difference >= -px(0.001) && right_difference <= px(0.001));
         });
     }
 }

@@ -94,6 +94,41 @@ Clearing the search keeps the current page rather than restoring an earlier
 selection. When no settings match, no page content is shown and the selection
 is retained for when results return.
 
+### Search Presentation
+
+Use `search_placeholder` to supply application-owned text without changing Kit's
+global locale. Changing the placeholder on a retained Settings instance keeps
+the current query and selection.
+
+Use `empty` to show custom content when no setting matches. Its first argument
+is the retained search input, so a recovery action can clear the query and
+return focus to the search field:
+
+```rust
+Settings::new("app-settings")
+    .search_placeholder("Rechercher un réglage…")
+    .empty(|input, _, _| {
+        let input = input.clone();
+        div()
+            .child("Aucun réglage ne correspond à la recherche.")
+            .child(
+                Button::new("clear-settings-search")
+                    .label("Effacer la recherche")
+                    .on_click(move |_, window, cx| {
+                        input.update(cx, |input, cx| {
+                            input.set_value("", window, cx);
+                            input.focus(window, cx);
+                        });
+                    }),
+            )
+    })
+    .pages(vec![...])
+```
+
+Typing and programmatic query changes both refresh the results. Placeholder
+changes do not clear the query. Without `empty`, no-results content remains
+blank, preserving the existing default.
+
 ### Group Variants
 
 ```rust

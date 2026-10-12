@@ -1,4 +1,5 @@
 use std::ops::Range;
+use unicode_properties::{GeneralCategoryGroup, UnicodeGeneralCategory};
 
 #[derive(Clone, Copy)]
 enum CharacterKind {
@@ -11,8 +12,8 @@ enum CharacterKind {
 impl From<char> for CharacterKind {
     fn from(character: char) -> Self {
         if character == '_'
-            || character.is_ascii_alphanumeric()
-            || matches!(character, '\u{00C0}'..='\u{024F}' | '\u{0400}'..='\u{04FF}' | '\u{1E00}'..='\u{1EFF}' | '\u{0300}'..='\u{036F}')
+            || character.is_alphanumeric()
+            || character.general_category_group() == GeneralCategoryGroup::Mark
         {
             Self::Word
         } else if matches!(character, '\n' | '\r') {
@@ -79,4 +80,23 @@ fn clip_offset_left(text: &str, offset: usize) -> usize {
         offset -= 1;
     }
     offset
+}
+
+#[cfg(test)]
+mod tests {
+    use super::word_range_at;
+
+    #[test]
+    fn word_selection_keeps_unicode_letters_and_marks_together() {
+        for word in ["علي", "عَلِيّ", "école", "e\u{301}cole", "касса", "SKU_42"] {
+            let text = format!("before {word}، after");
+            let start = "before ".len();
+            for (offset, _) in word.char_indices() {
+                let range = word_range_at(&text, start + offset).unwrap();
+                assert_eq!(&text[range], word, "word must stay whole at byte {offset}");
+            }
+            let punctuation = word_range_at(&text, start + word.len()).unwrap();
+            assert_eq!(&text[punctuation], "،");
+        }
+    }
 }
