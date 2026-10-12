@@ -495,6 +495,7 @@ impl RenderOnce for Settings {
     }
 }
 
-#[cfg(test)]
+// These interaction tests query the live observation tree.
+#[cfg(all(test, feature = "test-support"))]
 #[path = "tests.rs"]
 mod tests;

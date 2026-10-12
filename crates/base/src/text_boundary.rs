@@ -1,5 +1,6 @@
 use std::ops::Range;
 use unicode_properties::{GeneralCategoryGroup, UnicodeGeneralCategory};
+use unicode_segmentation::UnicodeSegmentation;
 
 #[derive(Clone, Copy)]
 enum CharacterKind {
@@ -33,11 +34,26 @@ pub(crate) fn word_range_from_chars(
     following: impl Iterator<Item = char>,
 ) -> Range<usize> {
     let kind = CharacterKind::from(character);
+    if matches!(kind, CharacterKind::Word) {
+        // Unicode word boundaries retain Arabic marks without joining adjacent
+        // Han ideographs. Keep the same bounded context as the character walk.
+        let mut before = previous.take(128).collect::<Vec<_>>();
+        before.reverse();
+        let mut context = before.into_iter().collect::<String>();
+        let anchor = context.len();
+        let context_start = offset - anchor;
+        context.push(character);
+        context.extend(following.take(128));
+        return context
+            .split_word_bound_indices()
+            .find(|(start, word)| *start <= anchor && anchor < *start + word.len())
+            .map(|(start, word)| context_start + start..context_start + start + word.len())
+            .unwrap_or(offset..offset + character.len_utf8());
+    }
     let connects = |next| {
         matches!(
             (kind, CharacterKind::from(next)),
-            (CharacterKind::Word, CharacterKind::Word)
-                | (CharacterKind::Whitespace, CharacterKind::Whitespace)
+            (CharacterKind::Whitespace, CharacterKind::Whitespace)
         )
     };
     let start = previous
