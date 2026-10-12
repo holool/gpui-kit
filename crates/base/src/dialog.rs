@@ -6,7 +6,7 @@ use std::{
 
 use gpui::{
     AnyElement, App, ClickEvent, FocusHandle, InteractiveElement as _, IntoElement, KeyBinding,
-    MouseButton, ParentElement, Pixels, RenderOnce, Role, SharedString, Stateful,
+    MouseButton, ParentElement, Pixels, RenderOnce, Role, SharedString,
     StatefulInteractiveElement as _, StyleRefinement, Styled, Window, anchored, deferred, div,
     point, prelude::FluentBuilder as _, px,
 };
@@ -656,11 +656,11 @@ impl RenderOnce for Dialog {
 /// The host's accessibility node: its role and name, and, on GPUI Fast, the
 /// modal state. The host traps focus over a backdrop, so the content behind
 /// it is inert.
-fn accessible_host(
-    host: Stateful<gpui::Div>,
+fn accessible_host<E: gpui::StatefulInteractiveElement + gpui::prelude::FluentBuilder>(
+    host: E,
     role: Role,
     label: Option<SharedString>,
-) -> Stateful<gpui::Div> {
+) -> E {
     let host = host
         .role(role)
         .when_some(label, |host, label| host.aria_label(label));
