@@ -70,6 +70,7 @@ export default class App extends View {
     let loaded = runtime.load_application(&root, "main.js").unwrap();
     let mounted = std::rc::Rc::new(std::cell::RefCell::new(None));
     let capture = mounted.clone();
+    delegate_collections::test_probe::take_rows();
     let window = cx.add_window(move |window, cx| {
         let view = runtime.mount_application(&loaded, window, cx).unwrap();
         *capture.borrow_mut() = Some(view.clone());
@@ -78,14 +79,13 @@ export default class App extends View {
     let mut context = VisualTestContext::from_window(*window.deref(), cx);
     let view = mounted.borrow().clone().unwrap();
 
-    delegate_collections::test_probe::take_rows();
     context.update(|window, cx| window.draw(cx).clear(cx));
     let initial = delegate_collections::test_probe::take_rows();
     assert!(!initial.is_empty());
     assert!(initial.iter().all(|id| id == "alpha"), "{initial:?}");
+    delegate_collections::test_probe::take_rows();
     context.update(|_, cx| view.update(cx, |view, cx| view.refresh(cx)));
     context.run_until_parked();
-    delegate_collections::test_probe::take_rows();
     context.update(|window, cx| window.draw(cx).clear(cx));
     let refreshed = delegate_collections::test_probe::take_rows();
     assert!(!refreshed.is_empty());

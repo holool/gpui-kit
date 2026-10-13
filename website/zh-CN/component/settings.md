@@ -114,6 +114,32 @@ SettingGroup::new()
     .items(vec![...])
 ```
 
+### 搜索提示与空结果
+
+使用 `search_placeholder` 设置应用自己的搜索提示，无需更改 Kit 的全局语言。
+更新提示会保留当前搜索内容和所选页面。
+
+使用 `empty` 自定义没有匹配项时的内容。回调接收保留的搜索输入状态，
+应用可通过它清空搜索并恢复输入焦点：
+
+```rust
+Settings::new("app-settings")
+    .search_placeholder("搜索设置…")
+    .empty(|input, _, _| {
+        let input = input.clone();
+        div().child(Button::new("clear-search").label("清空搜索")
+            .on_click(move |_, window, cx| {
+                input.update(cx, |input, cx| {
+                    input.set_value("", window, cx);
+                    input.focus(window, cx);
+                });
+            }))
+    })
+    .pages(vec![...])
+```
+
+键盘输入和程序设置的搜索内容都会刷新结果。未设置 `empty` 时仍使用原有的空白内容。
+
 ## Setting Page
 
 ### 基础页面

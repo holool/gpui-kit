@@ -3217,7 +3217,13 @@ mod tests {
         }
 
         fn draw(cx: &mut VisualTestContext) {
-            cx.update(|window, cx| window.draw(cx).clear(cx));
+            cx.run_until_parked();
+            cx.update(|window, cx| {
+                window.simulate_next_frame(cx);
+                window.refresh();
+                window.draw(cx).clear(cx);
+            });
+            cx.run_until_parked();
         }
 
         /// Asks to reveal the first occurrence of `needle`, then runs `then`

@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AccessibleAction, AnyElement, App, DefiniteLength, Edges, ElementId, Entity, Hsla,
+    AccessibleAction, AnyElement, App, ClickEvent, DefiniteLength, Edges, ElementId, Entity, Hsla,
     InteractiveElement as _, IntoElement, MouseButton, ParentElement as _, Rems, RenderOnce, Role,
     SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled, TouchPhase, Window,
     div, px, relative,
@@ -748,6 +748,30 @@ impl RenderOnce for Input {
             .focused(focused)
             .disabled(disabled)
             .track_focus(&frame_focus_handle)
+            .on_mouse_down(MouseButton::Left, {
+                let state = state.clone();
+                move |_, window, cx| {
+                    if !disabled
+                        && !window.default_prevented()
+                        && !state.has_selection_focus(window, cx)
+                    {
+                        state.focus(window, cx);
+                        // Keep the frame's default focus from replacing the editor focus.
+                        window.prevent_default();
+                    }
+                }
+            })
+            .on_click({
+                let state = state.clone();
+                move |event, window, cx| {
+                    if !disabled
+                        && matches!(event, ClickEvent::Touch(_))
+                        && !state.has_selection_focus(window, cx)
+                    {
+                        state.focus(window, cx);
+                    }
+                }
+            })
             .on_mouse_down(MouseButton::Right, {
                 let state = state.clone();
                 move |_, window, cx| {
@@ -1254,6 +1278,78 @@ mod tests {
             false,
             Some(InputContentType::NewPassword)
         ));
+    }
+
+    #[gpui::test]
+    fn padding_focus_keeps_the_editor_active_and_respects_editability(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        use crate::Root;
+        use gpui::{AppContext as _, Focusable as _, Render, point, px};
+
+        struct Probe {
+            input: Entity<InputState>,
+            disabled: bool,
+            readonly: bool,
+        }
+        impl Render for Probe {
+            fn render(&mut self, _: &mut Window, _: &mut gpui::Context<Self>) -> impl IntoElement {
+                div().p_4().w(px(400.)).child(
+                    Input::new(&self.input)
+                        .disabled(self.disabled)
+                        .readonly(self.readonly),
+                )
+            }
+        }
+
+        cx.update(crate::init);
+        for (disabled, readonly) in [(false, false), (false, true), (true, false)] {
+            for start_edge in [true, false] {
+                let mut input = None;
+                let window = cx.update(|cx| {
+                    cx.open_window(Default::default(), |window, cx| {
+                        let state = cx.new(|cx| InputState::new(window, cx));
+                        input = Some(state.clone());
+                        let probe = cx.new(|_| Probe {
+                            input: state,
+                            disabled,
+                            readonly,
+                        });
+                        cx.new(|cx| Root::new(probe, window, cx))
+                    })
+                    .unwrap()
+                });
+                let input = input.unwrap();
+                let mut visual = gpui::VisualTestContext::from_window(window.into(), cx);
+                visual.update(|window, cx| {
+                    let _ = window.draw(cx);
+                });
+                let bounds = input.read_with(&visual, |state, _| state.input_bounds());
+                let x = if start_edge {
+                    bounds.left() - px(2.)
+                } else {
+                    bounds.right() + px(2.)
+                };
+                visual.simulate_click(
+                    point(x, bounds.top() + bounds.size.height / 2.),
+                    Default::default(),
+                );
+                visual.update(|window, cx| {
+                    let _ = window.draw(cx);
+                    assert_eq!(
+                        input.focus_handle(cx).is_focused(window),
+                        !disabled,
+                        "padding must focus the editor, not its frame; disabled={disabled}"
+                    );
+                });
+                visual.simulate_input("A");
+                assert_eq!(
+                    input.read_with(&visual, |state, _| state.value().to_string()),
+                    if disabled || readonly { "" } else { "A" },
+                    "padding focus must preserve disabled and readonly editing restrictions"
+                );
+            }
+        }
     }
 
     #[gpui::test]

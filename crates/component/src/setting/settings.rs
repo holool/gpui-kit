@@ -1,4 +1,4 @@
-use std::ops::Range;
+use std::{ops::Range, rc::Rc};
 
 use crate::{
     IconName, Sizable, Size, StyledExt,
@@ -10,13 +10,15 @@ use crate::{
     sidebar::{Sidebar, SidebarMenu, SidebarMenuItem},
 };
 use gpui::{
-    App, AppContext as _, Axis, ElementId, Entity, IntoElement, ParentElement as _, Pixels,
-    RenderOnce, StyleRefinement, Styled, Window, container_query, div, prelude::FluentBuilder as _,
-    px, relative,
+    AnyElement, App, AppContext as _, Axis, ElementId, Entity, IntoElement, ParentElement as _,
+    Pixels, RenderOnce, SharedString, StyleRefinement, Styled, Subscription, Window,
+    container_query, div, prelude::FluentBuilder as _, px, relative,
 };
 use rust_i18n::t;
 
 const STACKED_LAYOUT_MAX_WIDTH: Pixels = px(480.);
+
+type EmptyRenderer = dyn Fn(&Entity<InputState>, &mut Window, &mut App) -> AnyElement;
 
 /// The settings structure containing multiple pages for app settings.
 ///
@@ -41,6 +43,8 @@ pub struct Settings {
     sidebar_style: StyleRefinement,
     default_selected_index: SelectIndex,
     header_style: StyleRefinement,
+    search_placeholder: Option<SharedString>,
+    empty: Option<Rc<EmptyRenderer>>,
 }
 
 impl Settings {
@@ -56,6 +60,8 @@ impl Settings {
             sidebar_style: StyleRefinement::default(),
             default_selected_index: SelectIndex::default(),
             header_style: StyleRefinement::default(),
+            search_placeholder: None,
+            empty: None,
         }
     }
 
@@ -68,6 +74,28 @@ impl Settings {
     /// Set the resize range of the sidebar, default is `160px..360px`.
     pub fn sidebar_size_range(mut self, range: impl Into<Range<Pixels>>) -> Self {
         self.sidebar_size_range = range.into();
+        self
+    }
+
+    /// Set the search placeholder. Defaults to the current Kit locale.
+    ///
+    /// Changing this on retained Settings preserves its query and selection.
+    pub fn search_placeholder(mut self, placeholder: impl Into<SharedString>) -> Self {
+        self.search_placeholder = Some(placeholder.into());
+        self
+    }
+
+    /// Render custom content when no setting matches the search.
+    ///
+    /// The retained search input can be used to clear the query or restore focus.
+    pub fn empty<F, E>(mut self, render: F) -> Self
+    where
+        F: Fn(&Entity<InputState>, &mut Window, &mut App) -> E + 'static,
+        E: IntoElement,
+    {
+        self.empty = Some(Rc::new(move |input, window, cx| {
+            render(input, window, cx).into_any_element()
+        }));
         self
     }
 
@@ -125,6 +153,9 @@ impl Settings {
                 .render(page_ix, &filter.groups[page_ix], state, options, window, cx)
                 .into_any_element();
         }
+        if let Some(render) = &self.empty {
+            return render(&state.read(cx).search_input.clone(), window, cx);
+        }
 
         div().into_any_element()
     }
@@ -146,10 +177,11 @@ impl Settings {
             .collapsible(false)
             .collapsed(false)
             .header(
-                div()
-                    .w_full()
-                    .refine_style(&self.header_style)
-                    .child(Input::new(&search_input).prefix(IconName::Search)),
+                div().w_full().refine_style(&self.header_style).child(
+                    Input::new(&search_input)
+                        .id("settings-search")
+                        .prefix(IconName::Search),
+                ),
             )
             .child(
                 SidebarMenu::new().children(filter.visible_pages().map(|page_ix| {
@@ -268,6 +300,9 @@ pub(super) struct SettingsState {
     /// If set, defer scrolling to this group index after rendering.
     pub(super) deferred_scroll_group_ix: Option<usize>,
     pub(super) search_input: Entity<InputState>,
+    applied_placeholder: SharedString,
+    search_query: SharedString,
+    _search_subscription: Subscription,
 }
 
 /// Options for rendering setting item.
@@ -381,19 +416,46 @@ pub struct SelectIndex {
 
 impl RenderOnce for Settings {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let placeholder = self
+            .search_placeholder
+            .clone()
+            .unwrap_or_else(|| t!("Settings.search_placeholder").into());
         let state = window.use_keyed_state(self.id.clone(), cx, |window, cx| {
             let search_input = cx.new(|cx| {
                 InputState::new(window, cx)
-                    .placeholder(t!("Settings.search_placeholder"))
+                    .placeholder(placeholder.clone())
                     .default_value("")
             });
+            // set_value intentionally emits no Change event. Observe value changes
+            // so both typing and the application's clear-search action redraw.
+            let search_subscription =
+                cx.observe(&search_input, |state: &mut SettingsState, input, cx| {
+                    let query = input.read(cx).value();
+                    if state.search_query != query {
+                        state.search_query = query;
+                        cx.notify();
+                    }
+                });
 
             SettingsState {
                 search_input,
                 selected_index: self.default_selected_index,
                 deferred_scroll_group_ix: None,
+                applied_placeholder: placeholder.clone(),
+                search_query: SharedString::default(),
+                _search_subscription: search_subscription,
             }
         });
+
+        // InputState::set_placeholder notifies even when unchanged. Apply only
+        // actual changes so retained Settings does not redraw continuously.
+        if state.read(cx).applied_placeholder != placeholder {
+            let input = state.read(cx).search_input.clone();
+            input.update(cx, |input, cx| {
+                input.set_placeholder(placeholder.clone(), window, cx);
+            });
+            state.update(cx, |state, _| state.applied_placeholder = placeholder);
+        }
 
         let query = state.read(cx).search_input.read(cx).value();
         let filter = SettingsFilter::new(&self.pages, &query, cx);
@@ -433,6 +495,7 @@ impl RenderOnce for Settings {
     }
 }
 
-#[cfg(test)]
+// These interaction tests query the live observation tree.
+#[cfg(all(test, feature = "test-support"))]
 #[path = "tests.rs"]
 mod tests;

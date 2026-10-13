@@ -138,8 +138,10 @@ export default class App extends View {
     .child(new TreeItem("readme", "README").disabled(true)); }
 }
 "#;
-    let (mut context, view, _app) = mount(cx, source);
+    // Mount and input dispatch can already paint a frame. Clear before the
+    // action so retained redraws do not discard its actual observations.
     collections::test_probe::take_rows();
+    let (mut context, view, _app) = mount(cx, source);
     draw(&mut context, view.clone());
     context.update(|_, cx| {
         assert_eq!(view.read(cx).build_error(), None);
@@ -154,9 +156,9 @@ export default class App extends View {
         ]
     );
 
+    collections::test_probe::take_rows();
     context.simulate_click(point(px(20.), px(20.)), Modifiers::default());
     context.run_until_parked();
-    collections::test_probe::take_rows();
     draw(&mut context, view.clone());
     let collapsed = distinct_rows(collections::test_probe::take_rows());
     assert_eq!(
@@ -168,9 +170,9 @@ export default class App extends View {
         "native click must select and collapse the folder"
     );
 
+    collections::test_probe::take_rows();
     context.update(|_, cx| view.update(cx, |view, cx| view.refresh(cx)));
     context.run_until_parked();
-    collections::test_probe::take_rows();
     draw(&mut context, view.clone());
     context.update(|_, cx| {
         assert_eq!(view.read(cx).build_error(), None);
@@ -185,9 +187,9 @@ export default class App extends View {
         "data must sync while native selection and collapse persist"
     );
 
+    collections::test_probe::take_rows();
     context.simulate_click(point(px(20.), px(20.)), Modifiers::default());
     context.run_until_parked();
-    collections::test_probe::take_rows();
     draw(&mut context, view);
     let expanded = distinct_rows(collections::test_probe::take_rows());
     assert_eq!(
@@ -208,8 +210,8 @@ fn draw_invalid(cx: &mut TestAppContext, expression: &str) -> Vec<String> {
 import {{ Tree, TreeItem }} from "gpui-component";
 export default class App extends View {{ render() {{ return {expression}; }} }}"#
     );
-    let (mut context, view, _app) = mount(cx, &source);
     collections::test_probe::take_errors();
+    let (mut context, view, _app) = mount(cx, &source);
     draw(&mut context, view);
     collections::test_probe::take_errors()
 }

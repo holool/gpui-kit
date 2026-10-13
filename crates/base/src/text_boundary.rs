@@ -1,4 +1,6 @@
 use std::ops::Range;
+use unicode_properties::{GeneralCategoryGroup, UnicodeGeneralCategory};
+use unicode_segmentation::UnicodeSegmentation;
 
 #[derive(Clone, Copy)]
 enum CharacterKind {
@@ -11,8 +13,8 @@ enum CharacterKind {
 impl From<char> for CharacterKind {
     fn from(character: char) -> Self {
         if character == '_'
-            || character.is_ascii_alphanumeric()
-            || matches!(character, '\u{00C0}'..='\u{024F}' | '\u{0400}'..='\u{04FF}' | '\u{1E00}'..='\u{1EFF}' | '\u{0300}'..='\u{036F}')
+            || character.is_alphanumeric()
+            || character.general_category_group() == GeneralCategoryGroup::Mark
         {
             Self::Word
         } else if matches!(character, '\n' | '\r') {
@@ -32,11 +34,26 @@ pub(crate) fn word_range_from_chars(
     following: impl Iterator<Item = char>,
 ) -> Range<usize> {
     let kind = CharacterKind::from(character);
+    if matches!(kind, CharacterKind::Word) {
+        // Unicode word boundaries retain Arabic marks without joining adjacent
+        // Han ideographs. Keep the same bounded context as the character walk.
+        let mut before = previous.take(128).collect::<Vec<_>>();
+        before.reverse();
+        let mut context = before.into_iter().collect::<String>();
+        let anchor = context.len();
+        let context_start = offset - anchor;
+        context.push(character);
+        context.extend(following.take(128));
+        return context
+            .split_word_bound_indices()
+            .find(|(start, word)| *start <= anchor && anchor < *start + word.len())
+            .map(|(start, word)| context_start + start..context_start + start + word.len())
+            .unwrap_or(offset..offset + character.len_utf8());
+    }
     let connects = |next| {
         matches!(
             (kind, CharacterKind::from(next)),
-            (CharacterKind::Word, CharacterKind::Word)
-                | (CharacterKind::Whitespace, CharacterKind::Whitespace)
+            (CharacterKind::Whitespace, CharacterKind::Whitespace)
         )
     };
     let start = previous
@@ -79,4 +96,23 @@ fn clip_offset_left(text: &str, offset: usize) -> usize {
         offset -= 1;
     }
     offset
+}
+
+#[cfg(test)]
+mod tests {
+    use super::word_range_at;
+
+    #[test]
+    fn word_selection_keeps_unicode_letters_and_marks_together() {
+        for word in ["علي", "عَلِيّ", "école", "e\u{301}cole", "касса", "SKU_42"] {
+            let text = format!("before {word}، after");
+            let start = "before ".len();
+            for (offset, _) in word.char_indices() {
+                let range = word_range_at(&text, start + offset).unwrap();
+                assert_eq!(&text[range], word, "word must stay whole at byte {offset}");
+            }
+            let punctuation = word_range_at(&text, start + word.len()).unwrap();
+            assert_eq!(&text[punctuation], "،");
+        }
+    }
 }
