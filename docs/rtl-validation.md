@@ -114,3 +114,64 @@ Local validation with Rust 1.95:
 The counts above supersede the initial-port failure counts for this revision.
 Native Windows and physical touchscreen QA remain outside local validation;
 platform CI runs on the companion PRs.
+
+## Upstream Kit sync (October 16, 2026)
+
+Merged all 50 upstream commits through longbridge/gpui-kit
+`2963d6d880b9dffe59b48b0533bdc83c03201209` (Kit 0.7.3). This includes the
+unified Shell, optional Syntect backend, native overscroll, focus/select/input
+fixes, and disabled-control accessibility reporting. The Arabic example now
+uses the workspace's 0.7.3 version. Holool's Arabic shaping, bidi selection,
+native focus, IME geometry, RTL controls, Settings search, motion timing, and
+Fast test-observation fixes remain in the merged sources.
+
+Fast stays in Kit's default feature list. The shared runtime revision remains
+Holool `f36872ac33346aab252712e3bfd0e567807e6f4c`; all compatibility runtime
+crates and the published Kit-aware macros remain exactly 0.3.9. Cargo metadata
+confirms exactly one GPUI runtime from that Holool revision, including the
+compatibility aliases. The upstream development profiles now name the actual
+`gpui` and `gpui_platform` packages.
+
+Two new input-overscroll fixtures deliver their requested animation frames with
+`simulate_next_frame` before drawing. Their original endpoint assertions and
+120-frame limit remain intact. Three new tooltip checks counted builder calls
+on idle draws; they now notify the tooltip overlay before checking its builder
+ownership, allowing other frames to retain the existing view.
+
+The full component suite also exposed stale dock close buttons when a shared
+skin setting changed. Skin settings live in `Cell`s outside retained entities.
+The skin now remembers its owning window and defers a refresh of that window
+when a setting changes, including from an in-progress UI update. This preserves
+normal-frame caching and does not refresh other windows. The existing
+close-button visibility regression exercises both enable and disable transitions.
+
+Local validation on macOS with Rust 1.95:
+
+- Full Base: 1,389 passed, including native Arabic editing, selection, focus,
+  and the new disabled-accessibility regressions.
+- Component: 690 passed; component integration: 50 passed, including the
+  dock setting transition and all RTL switches.
+- Kit facade/UI integration: 391 passed; Kit doctests: 2 passed.
+- Real Metal offscreen rendering: 13 passed.
+- FPS: 34 passed; WebView: 2 passed; optional Syntect highlighter: 6 passed.
+- Shell: 117 integration tests and 919 runtime tests passed; 1 upstream large
+  benchmark ignored by default.
+- Explicit Fast and no-default-features checks pass; Arabic, Tig, and Syntect
+  examples compile.
+- Generated TypeScript positive/negative fixtures and runtime checks pass.
+  JS Story coverage tracks all 78 catalog surfaces across 77 routes.
+- Exact snapshot pins, the shared Fast dependency graph, formatting, and
+  published documentation fragment checks pass.
+- All-targets strict core/Shell/WebView Clippy and Cargo Machete pass without
+  lint allowances or unused dependencies.
+
+Shell's temporary Git fixtures inherit this machine's signed-tag default, so
+validation overrides `tag.gpgSign` and `commit.gpgSign` only in the test process.
+No global Git configuration changes. Parallel Shell runs exposed an upstream
+500 ms loopback-accept timeout and a wall-clock templating benchmark assertion;
+the entire runtime suite is also run serially, with no added skips or weakened
+assertions. Its one ignored large benchmark is upstream's existing default.
+
+Native Windows, Linux GUI, OS IME, physical touch, and manual assistive-technology
+review are outside this local macOS validation; the PR retains platform CI and
+Holool's RTL CI steps.

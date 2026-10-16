@@ -146,6 +146,7 @@ API 形态跟随 Rust 原型：`App` 上的方法放在 `cx`，`Window` 上的�
 | `phase()`                  | 这次调用处于哪个 `ScopePhase`                                        |
 | `theme()`                  | 当前 `gpui_kit::base::Theme` 的语义 token 投影                       |
 | `open_url(url)`            | 把一个绝对的 `http`/`https` URL 交给系统处理器                       |
+| `open_path(path)`          | 用默认程序打开 `capabilities.fs.read` 授权范围内的文件或目录              |
 | `read_from_clipboard()`    | 剪贴板里的文本，没有文本时是 `undefined`                             |
 | `write_to_clipboard(text)` | 替换剪贴板里的文本                                                   |
 | `focus_handle()`           | 一个新的 `FocusHandle`；属于 `init` 或事件处理器，绝不属于 `render`  |
@@ -154,7 +155,7 @@ API 形态跟随 Rust 原型：`App` 上的方法放在 `cx`，`Window` 上的�
 | `sleep(ms?)`               | 在 GPUI 的 foreground executor 上，`ms` 之后 resolve                 |
 | `timer`                    | `Timer`：`after` 与 `every`                                          |
 
-其中好几个都指名了它所镜像的 GPUI 方法：`open_url` 是 `App::open_url`，`read_from_clipboard` 与 `write_to_clipboard` 是 `App::read_from_clipboard` 与 `App::write_to_clipboard`，`focus_handle` 是 `App::focus_handle`（GPUI 没有 `FocusHandle::new`，这里同样没有），`new` 是 `AppContext::new`，`spawn` 是 `App::spawn`。
+其中好几个都指名了它所镜像的 GPUI 方法：`open_url` 是 `App::open_url`，`open_path` 是 `App::open_with_system`，`read_from_clipboard` 与 `write_to_clipboard` 是 `App::read_from_clipboard` 与 `App::write_to_clipboard`，`focus_handle` 是 `App::focus_handle`（GPUI 没有 `FocusHandle::new`，这里同样没有），`new` 是 `AppContext::new`，`spawn` 是 `App::spawn`。
 
 ### `AsyncContext`
 
@@ -609,6 +610,7 @@ render() {
 | `on_mouse_up(button, handler)`   | 松开时的 `(MouseButtonEvent, cx)`                                           |
 | `on_mouse_down_out(handler)`     | 在该元素之外任意位置按下时的 `(MouseButtonEvent, cx)`                       |
 | `on_scroll_wheel(handler)`       | 滚轮或触控板滚动时的 `(ScrollWheelEvent, cx)`                               |
+| `on_pinch(handler)`              | 触控板或触摸屏双指缩放每一步的 `(PinchEvent, cx)`                           |
 | `on_action(action, handler)`     | 该命名 action 被派发到此元素或其内部时的 `(ActionEvent, cx)`                |
 | `on_change(handler)`             | 开关变化时的 `(checked, cx)`；新值由脚本保存                                |
 | `on_step(handler)`               | `("increment" \| "decrement", cx)`，并且它会**取代**内置的步进              |
