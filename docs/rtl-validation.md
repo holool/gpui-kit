@@ -1,5 +1,7 @@
 # RTL validation
 
+## Initial port (October 10, 2026)
+
 Tested on macOS with Rust 1.95, plus Linux/X11 in a Rust 1.95 ARM64 container
 and a cross-compiled x86_64 Windows GNU backend. Native Windows drawing and
 physical touch devices still need device QA.
@@ -72,3 +74,43 @@ motion is enabled for deterministic endpoint assertions; this test does not
 exercise animated travel or add drag support. Fast CI runs the entire switch
 test group on macOS, Linux, and Windows. All 10 switch tests pass locally on
 macOS with Rust 1.95 and `gpui-fast` enabled.
+
+## Upstream Fast sync (October 16, 2026)
+
+Kit pins all GPUI runtime crates to Holool Fast
+`f36872ac33346aab252712e3bfd0e567807e6f4c`, a merge of Holool main and
+longbridge/gpui-fast `eeccb27f7b7b437e0d99277af2b696e6c71fb6ef`.
+The compatibility snapshot and the published Kit-aware procedural macros move
+together to exact version 0.3.9. Fast remains enabled by default; dependency
+inspection confirms one shared Fast runtime across the compatibility aliases.
+
+CoreText moved into `gpui_apple`; Fast preserves the macOS native text-system
+helper used by Kit's Arabic tests. The new upstream text-measurement cache guard
+also recognizes independently shaped bidi soft wraps, retaining correct
+unconstrained Arabic and mixed-text measurements.
+
+The FPS test fixtures initialize the snapshot's new frame-timing fields.
+Four bounce fixtures now refresh after their setup changes shared list offsets
+outside entities. Upstream Fast classifies scrollbar offsets as scroll-only
+changes; the old fixtures relied on the earlier broad invalidation. The refresh
+is before the tested gestures, preserving their existing coalescing and boundary
+assertions. No production Base behavior changed. Before this fixture adjustment,
+the new engine had four failures and unchanged Holool main passed all 23 bounce
+tests; afterward all 23 pass with the new engine.
+
+Local validation with Rust 1.95:
+
+- Fast core: 694 passed, 3 ignored on macOS; 708 passed, 3 ignored on Linux.
+- Native CoreText Arabic regression: 1 passed; Linux/X11 contacts: 5 passed.
+- Full Kit Base: 1,337 passed, including native Arabic editing regressions.
+- Kit facade, UI integrations, and doctests: 382 passed.
+- Kit switches: 10 passed; FPS: 34 passed.
+- Kit offscreen rendering: 12 passed with the real Metal renderer.
+- Explicit Fast and no-default-features checks pass; Arabic and Tig examples build.
+- Exact snapshot-pin check, formatting, and upstream-hook checks pass.
+- Strict core/Apple/macOS and profiler Clippy pass. Kit all-targets Clippy passes
+  with only the previously documented calendar `nonminimal_bool` lint allowed.
+
+The counts above supersede the initial-port failure counts for this revision.
+Native Windows and physical touchscreen QA remain outside local validation;
+platform CI runs on the companion PRs.
