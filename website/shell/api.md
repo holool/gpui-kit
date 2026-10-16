@@ -147,6 +147,7 @@ There are two context lifetimes with the same methods. `Context`, received by `r
 | `phase()`                  | Which `ScopePhase` the call is in                                                                  |
 | `theme()`                  | The current `gpui_kit::base::Theme` semantic token projection                                      |
 | `open_url(url)`            | Hands an absolute `http`/`https` URL to the system handler                                         |
+| `open_path(path)`          | Opens a file or directory inside a `capabilities.fs.read` grant with its default application       |
 | `read_from_clipboard()`    | The clipboard's text, or `undefined` when it holds none                                            |
 | `write_to_clipboard(text)` | Replaces the clipboard's text                                                                      |
 | `focus_handle()`           | A new `FocusHandle`; belongs in `init` or an event handler, never in `render`                      |
@@ -155,7 +156,7 @@ There are two context lifetimes with the same methods. `Context`, received by `r
 | `sleep(ms?)`               | Resolves after `ms` on GPUI's foreground executor                                                  |
 | `timer`                    | The `Timer`: `after` and `every`                                                                   |
 
-Several of these name the GPUI method they mirror: `open_url` is `App::open_url`, `read_from_clipboard` and `write_to_clipboard` are `App::read_from_clipboard` and `App::write_to_clipboard`, `focus_handle` is `App::focus_handle` (GPUI has no `FocusHandle::new`, and neither does this), `new` is `AppContext::new`, and `spawn` is `App::spawn`.
+Several of these name the GPUI method they mirror: `open_url` is `App::open_url`, `open_path` is `App::open_with_system`, `read_from_clipboard` and `write_to_clipboard` are `App::read_from_clipboard` and `App::write_to_clipboard`, `focus_handle` is `App::focus_handle` (GPUI has no `FocusHandle::new`, and neither does this), `new` is `AppContext::new`, and `spawn` is `App::spawn`.
 
 ### `AsyncContext`
 
@@ -610,6 +611,7 @@ A slot is not a child: the element is consumed by the component and rendered whe
 | `on_mouse_up(button, handler)`   | `(MouseButtonEvent, cx)` on its release                                             |
 | `on_mouse_down_out(handler)`     | `(MouseButtonEvent, cx)` on a press anywhere outside this element                   |
 | `on_scroll_wheel(handler)`       | `(ScrollWheelEvent, cx)` on wheel or trackpad scrolling                             |
+| `on_pinch(handler)`              | `(PinchEvent, cx)` on each step of a trackpad or touch pinch                        |
 | `on_action(action, handler)`     | `(ActionEvent, cx)` when that named action is dispatched to this element or into it |
 | `on_change(handler)`             | `(checked, cx)` on a toggle; the script owns the new value                          |
 | `on_step(handler)`               | `("increment" \| "decrement", cx)`, and it **replaces** built-in stepping           |

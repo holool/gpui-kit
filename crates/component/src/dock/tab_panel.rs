@@ -689,6 +689,11 @@ impl TabGroupSkin {
 
 impl TabGroupRenderer for TabGroupSkin {
     fn frame(&self, group: &TabGroupContext, _: &mut Window, cx: &mut App) -> Stateful<Div> {
+        // Skin settings notify the owning area. Track that read so Fast also
+        // invalidates a retained tab group when those shared settings change.
+        if let Some(area) = self.shared.area().upgrade() {
+            let _ = area.read(cx);
+        }
         let control = zoom_control(group, cx);
 
         // The column, the fill and the clip are base's now, applied around
