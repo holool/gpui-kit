@@ -581,6 +581,7 @@ mod tests {
         });
         draw(cx);
         handle.set_offset(point(px(0.), px(-400.)));
+        cx.update(|window, _| window.refresh());
         draw(cx);
         let origin = handle.viewport_bounds().origin.y;
         // Unlike simulate_event (which may draw after each event), dispatch
@@ -614,6 +615,7 @@ mod tests {
         });
         draw(cx);
         handle.set_offset(point(px(0.), px(-400.)));
+        cx.update(|window, _| window.refresh());
         draw(cx);
         let origin = handle.viewport_bounds().origin.y;
         cx.update(|window, cx| {
@@ -645,6 +647,7 @@ mod tests {
             });
             draw(cx);
             handle.set_offset(point(px(0.), px(start)));
+            cx.update(|window, _| window.refresh());
             draw(cx);
             let origin = handle.viewport_bounds().origin.y;
             scroll(cx, delta, TouchPhase::Started);
@@ -723,6 +726,7 @@ mod tests {
         });
         draw(cx);
         handle.set_offset(point(px(0.), px(-1000.)));
+        cx.update(|window, _| window.refresh());
         draw(cx);
         let origin = handle.viewport_bounds().origin.y;
         // Smooth-scrolling mouse drivers on macOS: precise deltas, no phase.
