@@ -77,6 +77,7 @@ pub(crate) fn init(cx: &mut App) {
 /// frame.
 pub(crate) struct SkinShared {
     area: WeakEntity<DockArea>,
+    window: Cell<Option<gpui::AnyWindowHandle>>,
     panel_style: Cell<PanelStyle>,
     toggle_button_visible: Cell<bool>,
     close_button_visible: Cell<bool>,
@@ -105,6 +106,14 @@ impl SkinShared {
     /// nothing else would notice.
     fn notify(&self, cx: &mut App) {
         _ = self.area.update(cx, |_, cx| cx.notify());
+        // Settings live in shared Cells, outside retained views' entity data.
+        // Rebuild this window's skin when they change, leaving other windows
+        // and normal frames eligible for Fast retention.
+        if let Some(window) = self.window.get() {
+            cx.defer(move |cx| {
+                _ = cx.update_window(window, |_, window, _| window.refresh());
+            });
+        }
     }
 }
 
@@ -153,6 +162,7 @@ impl DockSkin {
         Rc::new(Self {
             shared: Rc::new(SkinShared {
                 area: cx.weak_entity(),
+                window: Cell::new(None),
                 panel_style: Cell::new(PanelStyle::default()),
                 toggle_button_visible: Cell::new(true),
                 close_button_visible: Cell::new(false),
