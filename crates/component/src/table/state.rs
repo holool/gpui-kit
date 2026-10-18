@@ -2735,7 +2735,25 @@ where
             })
             .on_prepaint({
                 let state = cx.entity();
-                move |bounds, _, cx| state.update(cx, |state, _| state.bounds = bounds)
+                let stripe = self.options.stripe;
+                move |bounds, _, cx| {
+                    state.update(cx, |state, cx| {
+                        state.bounds = bounds;
+                        // The filler rows were counted from last frame's body height
+                        // (zero on the first frame): render again once it is known.
+                        let body_height = state
+                            .vertical_scroll_handle
+                            .0
+                            .borrow()
+                            .base_handle
+                            .bounds()
+                            .size
+                            .height;
+                        if stripe && body_height != total_height {
+                            cx.notify();
+                        }
+                    })
+                }
             })
             .when(!window.is_inspector_picking(cx), |this| {
                 this.child(
@@ -2795,6 +2813,66 @@ mod tests {
                 .h(px(200.))
                 .child(DataTable::new(&self.0).scroll_bounce(true))
         }
+    }
+
+    struct StripeTable(Entity<TableState<StripeDelegate>>);
+
+    struct StripeDelegate;
+
+    impl TableDelegate for StripeDelegate {
+        fn columns_count(&self, _: &App) -> usize {
+            1
+        }
+        fn rows_count(&self, _: &App) -> usize {
+            2
+        }
+        fn column(&self, _: usize, _: &App) -> Column {
+            Column::new("value", "Value")
+        }
+        fn render_td(
+            &mut self,
+            row: usize,
+            _: usize,
+            _: &mut Window,
+            _: &mut Context<TableState<Self>>,
+        ) -> impl IntoElement {
+            div().child(row.to_string())
+        }
+    }
+
+    impl Render for StripeTable {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .w(px(240.))
+                .h(px(400.))
+                .child(DataTable::new(&self.0).stripe(true))
+        }
+    }
+
+    #[gpui::test]
+    fn stripe_filler_rows_render_again_once_the_body_height_is_known(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (view, cx) = cx.add_window_view(|window, cx| {
+            StripeTable(cx.new(|cx| TableState::new(StripeDelegate, window, cx)))
+        });
+        let state = view.read_with(cx, |view, _| view.0.clone());
+        let rendered_rows = |cx: &mut gpui::VisualTestContext| {
+            state.read_with(cx, |state, _| {
+                let list = state.vertical_scroll_handle.0.borrow();
+                let contents = list.last_item_size.unwrap().contents.height;
+                (contents / state.options.size.table_row_height()).round() as usize
+            })
+        };
+
+        // Opening the window draws the first frame, which counts the filler
+        // rows from a body height of zero. The next frame re-renders only the
+        // views that asked for it.
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert!(
+            rendered_rows(cx) > 2,
+            "the stripe filler rows must render on the second frame, \
+             not only at the next unrelated render"
+        );
     }
 
     #[gpui::test]
