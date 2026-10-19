@@ -4237,9 +4237,36 @@ impl<M: InputModeKind> EntityInputHandler for InputBaseState<M> {
             .map(|range| self.range_to_utf16(&range.into()))
     }
 
-    fn unmark_text(&mut self, _window: &mut Window, _cx: &mut Context<Self>) {
-        self.ime_marked_range = None;
+    fn set_selected_text_range(
+        &mut self,
+        range_utf16: Range<usize>,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.set_selected_range(self.range_from_utf16(&range_utf16), cx);
+    }
+
+    fn text_length_utf16(
+        &mut self,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) -> Option<usize> {
+        Some(self.range_to_utf16(&(0..self.text.len())).end)
+    }
+
+    fn unmark_text(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+        let finished_composition = self.ime_marked_range.take().is_some();
         self.undo_manager.commit_transaction();
+        // Android can confirm the preedit with finishComposingText without a
+        // replacement. A replacement commit already removed the mark and
+        // emitted Change, so its later unmark must not emit a second event.
+        if finished_composition {
+            self.update_search(cx);
+            if self.emit_events {
+                cx.emit(InputEvent::Change);
+            }
+            cx.notify();
+        }
     }
 
     /// Replace text in range.
@@ -8258,6 +8285,80 @@ mod tests {
 
                 s.redo(&Redo, window, cx);
                 assert_eq!(s.value(), "你");
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_ime_unmark_emits_one_committed_change(cx: &mut TestAppContext) {
+        use std::{cell::RefCell, rc::Rc};
+
+        let input_view = InputView::build(cx, |state| state.default_value(""));
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+        let values = Rc::new(RefCell::new(Vec::new()));
+        let _subscription = cx.update(|_, cx| {
+            let values = values.clone();
+            cx.subscribe(&input, move |input, event: &InputEvent, cx| {
+                if matches!(event, InputEvent::Change) {
+                    values.borrow_mut().push(input.read(cx).value().to_string());
+                }
+            })
+        });
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.replace_and_mark_text_in_range(None, "يوسف", Some(2..2), window, cx);
+            });
+        });
+        assert!(values.borrow().is_empty(), "preedit stays owned by the IME");
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                let selection = state.selected_range();
+                state.unmark_text(window, cx);
+                assert_eq!(state.selected_range(), selection);
+                assert_eq!(state.value(), "يوسف");
+                state.unmark_text(window, cx);
+            });
+        });
+        assert_eq!(*values.borrow(), vec!["يوسف"]);
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.replace_and_mark_text_in_range(None, "😀", Some(2..2), window, cx);
+                state.replace_text_in_range(None, "أمينة", window, cx);
+                state.unmark_text(window, cx);
+            });
+        });
+        assert_eq!(values.borrow().len(), 2, "replacement commits emit once");
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.emit_events = false;
+                state.replace_and_mark_text_in_range(None, "صامت", None, window, cx);
+                state.unmark_text(window, cx);
+            });
+        });
+        assert_eq!(values.borrow().len(), 2, "silent updates remain silent");
+    }
+
+    #[gpui::test]
+    fn test_ime_native_selection_uses_utf16_offsets(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| state.default_value("أ😀ب"));
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                assert_eq!(state.text_length_utf16(window, cx), Some(4));
+                state.set_selected_text_range(1..3, window, cx);
+                assert_eq!(state.selected_range(), 2..6);
+                state.replace_text_in_range(None, "س", window, cx);
+                assert_eq!(state.value(), "أسب");
+                assert_eq!(state.text_length_utf16(window, cx), Some(3));
+                assert_eq!(
+                    state.selected_text_range(false, window, cx).unwrap().range,
+                    2..2
+                );
             });
         });
     }

@@ -19,6 +19,8 @@ workspace = true
 default = ["component", "assets", "gpui-fast"]
 # Select GPUI Fast across the core, platforms, and already-enabled layers.
 gpui-fast = ["dep:gpui-fast", "dep:gpui-fast-platform", "dep:gpui-fast-web", "gpui-base/gpui-fast", "gpui-component?/gpui-fast", "gpui-kit-assets?/gpui-fast"]
+# Native host adapters use the same Fast core as the component layers.
+mobile = ["gpui-fast", "dep:gpui-ios", "dep:gpui-android"]
 # The styled component library, `gpui_kit::component`. Initializes `gpui-base` too.
 component = ["dep:gpui-component"]
 # The default icon set for `gpui-component`, `gpui_kit::assets`.
@@ -90,6 +92,12 @@ gpui-fast-platform = { workspace = true, optional = true }
 [target.'cfg(target_family = "wasm")'.dependencies]
 gpui_web.workspace = true
 gpui-fast-web = { workspace = true, optional = true }
+
+[target.'cfg(target_os = "ios")'.dependencies]
+gpui-ios = { package = "gpui_ios", git = "https://github.com/holool/gpui_ios", rev = "d834c3b3f2faaa63bb9ba05e8756c8d681f68ddc", optional = true }
+
+[target.'cfg(target_os = "android")'.dependencies]
+gpui-android = { package = "gpui_android", git = "https://github.com/holool/gpui_android", rev = "7d150f96ac52f1d1cec9372a0c59176ef221249d", optional = true }
 
 [dev-dependencies]
 chrono = "0.4.38"
