@@ -139,6 +139,10 @@ pub use ::gpui_platform as platform;
 pub use ::gpui_web as web;
 pub use gpui_base::is_mobile;
 
+/// Native iOS and Android hosting, backed by the same GPUI Fast runtime.
+#[cfg(all(feature = "mobile", any(target_os = "ios", target_os = "android")))]
+pub mod mobile;
+
 /// The styled component library.
 ///
 /// ```no_run

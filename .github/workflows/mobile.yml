@@ -1,0 +1,42 @@
+name: Native mobile integration
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: kit-mobile-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_PROFILE_DEV_DEBUG: 0
+
+jobs:
+  check:
+    name: Kit (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-ios-sim
+            os: macos-latest
+            features: component,assets,gpui-fast,mobile,gpui-ios/runtime_shaders
+          - target: aarch64-apple-ios
+            os: macos-latest
+            features: component,assets,gpui-fast,mobile,gpui-ios/runtime_shaders
+          - target: aarch64-linux-android
+            os: ubuntu-latest
+            features: component,assets,gpui-fast,mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.95
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: kit-mobile-${{ matrix.target }}
+      - name: Check Kit and target-specific native adapter
+        run: cargo check -p gpui-kit --lib --target ${{ matrix.target }} --no-default-features --features ${{ matrix.features }} --locked
