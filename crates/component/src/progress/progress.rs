@@ -1,8 +1,8 @@
 use crate::{ActiveTheme, Sizable, Size, StyledExt};
 use gpui::{
-    Animation, AnimationExt as _, App, Background, ElementId, Hsla, IntoElement, IsZero as _,
-    ParentElement, RenderOnce, SharedString, StyleRefinement, Styled, Window, ease_in_out,
-    prelude::FluentBuilder, px, relative,
+    Animation, AnimationExt as _, App, Background, Directional as _, ElementId, Hsla,
+    InteractiveElement as _, IntoElement, IsZero as _, ParentElement, RenderOnce, SharedString,
+    StyleRefinement, Styled, Window, div, ease_in_out, prelude::FluentBuilder, px, relative,
 };
 use gpui_base::{
     Progress as BaseProgress, ProgressIndicator, ProgressTrack, Transition, transition,
@@ -140,11 +140,18 @@ impl RenderOnce for Progress {
                 ProgressIndicator::new()
                     .absolute()
                     .top_0()
-                    .left_0()
+                    .start(px(0.))
                     .h_full()
                     .bg(bg)
                     .rounded(radius)
                     .refine_style(&inner_style)
+                    .when(cfg!(test), |this| {
+                        this.child(
+                            div()
+                                .debug_selector(|| "progress-indicator".into())
+                                .size_full(),
+                        )
+                    })
                     .map(|this| {
                         if loading && !reduce_motion {
                             this.with_animation(
@@ -154,13 +161,13 @@ impl RenderOnce for Progress {
                                     let start =
                                         relative(ease_in_out(((delta - 0.5) / 0.5).clamp(0., 1.)));
                                     let end = relative(ease_in_out(1.0 - delta));
-                                    this.when(delta > 0.5, |this| this.left(start)).right(end)
+                                    this.when(delta > 0.5, |this| this.start(start)).end(end)
                                 },
                             )
                             .into_any_element()
                         } else if loading {
-                            this.left(relative(0.325))
-                                .right(relative(0.325))
+                            this.start(relative(0.325))
+                                .end(relative(0.325))
                                 .into_any_element()
                         } else {
                             this.w(relative((animated_value / 100.).clamp(0., 1.)))
@@ -173,6 +180,8 @@ impl RenderOnce for Progress {
 
 #[cfg(test)]
 mod tests {
+    use gpui::{Context, LayoutDirection, Render, TestAppContext};
+
     use super::*;
 
     #[test]
@@ -185,5 +194,34 @@ mod tests {
             named.accessibility_label.as_deref(),
             Some("Upload progress")
         );
+    }
+
+    #[gpui::test]
+    fn the_indicator_fills_from_the_inline_start(cx: &mut TestAppContext) {
+        struct Harness(LayoutDirection);
+        impl Render for Harness {
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                div().w(px(200.)).direction(self.0).child(
+                    div()
+                        .debug_selector(|| "progress-track".into())
+                        .child(Progress::new("stock").value(25.)),
+                )
+            }
+        }
+
+        cx.update(crate::init);
+        cx.update(|cx| cx.set_reduce_motion(true));
+        for direction in [LayoutDirection::Ltr, LayoutDirection::Rtl] {
+            let (_, visual) = cx.add_window_view(move |_, _| Harness(direction));
+            visual.update(|window, cx| window.draw(cx).clear(cx));
+            let track = visual.debug_bounds("progress-track").unwrap();
+            let indicator = visual.debug_bounds("progress-indicator").unwrap();
+            assert_eq!(indicator.size.width, track.size.width / 4.);
+            if direction.is_rtl() {
+                assert_eq!(indicator.right(), track.right(), "RTL fills from the right");
+            } else {
+                assert_eq!(indicator.left(), track.left(), "LTR fills from the left");
+            }
+        }
     }
 }
