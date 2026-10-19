@@ -4357,7 +4357,7 @@ dependencies = [
 [[package]]
 name = "gpui_android"
 version = "0.1.0"
-source = "git+https://github.com/holool/gpui_android?rev=73c2ff4a2bbb4a062b1db8b32cb154131a1720a1#73c2ff4a2bbb4a062b1db8b32cb154131a1720a1"
+source = "git+https://github.com/holool/gpui_android?rev=7d150f96ac52f1d1cec9372a0c59176ef221249d#7d150f96ac52f1d1cec9372a0c59176ef221249d"
 dependencies = [
  "android_logger",
  "anyhow",

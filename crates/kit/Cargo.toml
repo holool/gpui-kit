@@ -97,7 +97,7 @@ gpui-fast-web = { workspace = true, optional = true }
 gpui-ios = { package = "gpui_ios", git = "https://github.com/holool/gpui_ios", rev = "d834c3b3f2faaa63bb9ba05e8756c8d681f68ddc", optional = true }
 
 [target.'cfg(target_os = "android")'.dependencies]
-gpui-android = { package = "gpui_android", git = "https://github.com/holool/gpui_android", rev = "73c2ff4a2bbb4a062b1db8b32cb154131a1720a1", optional = true }
+gpui-android = { package = "gpui_android", git = "https://github.com/holool/gpui_android", rev = "7d150f96ac52f1d1cec9372a0c59176ef221249d", optional = true }
 
 [dev-dependencies]
 chrono = "0.4.38"
