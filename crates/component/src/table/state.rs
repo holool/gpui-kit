@@ -2736,23 +2736,26 @@ where
             .on_prepaint({
                 let state = cx.entity();
                 let stripe = self.options.stripe;
-                move |bounds, _, cx| {
-                    state.update(cx, |state, cx| {
+                move |bounds, window, cx| {
+                    let body_height = state.update(cx, |state, _| {
                         state.bounds = bounds;
-                        // The filler rows were counted from last frame's body height
-                        // (zero on the first frame): render again once it is known.
-                        let body_height = state
+                        state
                             .vertical_scroll_handle
                             .0
                             .borrow()
                             .base_handle
                             .bounds()
                             .size
-                            .height;
-                        if stripe && body_height != total_height {
-                            cx.notify();
-                        }
-                    })
+                            .height
+                    });
+                    // The filler rows were counted from last frame's body height
+                    // (zero on the first frame): render again once it is known. A
+                    // notify during a draw does not request a frame, so notify on
+                    // the next one.
+                    if stripe && body_height != total_height {
+                        let state = state.clone();
+                        window.on_next_frame(move |_, cx| state.update(cx, |_, cx| cx.notify()));
+                    }
                 }
             })
             .when(!window.is_inspector_picking(cx), |this| {
@@ -2815,8 +2818,6 @@ mod tests {
         }
     }
 
-    struct StripeTable(Entity<TableState<StripeDelegate>>);
-
     struct StripeDelegate;
 
     impl TableDelegate for StripeDelegate {
@@ -2840,7 +2841,10 @@ mod tests {
         }
     }
 
-    impl Render for StripeTable {
+    /// An app page: it renders the table only when it is notified itself.
+    struct StripeHost(Entity<TableState<StripeDelegate>>);
+
+    impl Render for StripeHost {
         fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
             div()
                 .w(px(240.))
@@ -2849,13 +2853,26 @@ mod tests {
         }
     }
 
+    struct CachedStripeTable(Entity<StripeHost>);
+
+    impl Render for CachedStripeTable {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div().size_full().child(
+                self.0
+                    .clone()
+                    .cached(gpui::StyleRefinement::default().size_full()),
+            )
+        }
+    }
+
     #[gpui::test]
-    fn stripe_filler_rows_render_again_once_the_body_height_is_known(cx: &mut TestAppContext) {
+    fn stripe_filler_rows_render_on_the_next_frame_in_a_cached_parent(cx: &mut TestAppContext) {
         cx.update(crate::init);
         let (view, cx) = cx.add_window_view(|window, cx| {
-            StripeTable(cx.new(|cx| TableState::new(StripeDelegate, window, cx)))
+            let table = cx.new(|cx| TableState::new(StripeDelegate, window, cx));
+            CachedStripeTable(cx.new(|_| StripeHost(table)))
         });
-        let state = view.read_with(cx, |view, _| view.0.clone());
+        let state = view.read_with(cx, |view, cx| view.0.read(cx).0.clone());
         let rendered_rows = |cx: &mut gpui::VisualTestContext| {
             state.read_with(cx, |state, _| {
                 let list = state.vertical_scroll_handle.0.borrow();
@@ -2864,15 +2881,21 @@ mod tests {
             })
         };
 
-        // Opening the window draws the first frame, which counts the filler
-        // rows from a body height of zero. The next frame re-renders only the
-        // views that asked for it.
-        cx.update(|window, cx| window.draw(cx).clear(cx));
+        // Opening the window drew the first frame from a body height of zero.
+        cx.run_until_parked();
+        assert_eq!(rendered_rows(cx), 2, "the first frame has no filler rows");
+
+        // Deliver the next frame as the platform would. Nothing else notifies,
+        // and a test window draws only when it is dirty.
+        cx.update(|window, cx| window.simulate_next_frame(cx));
+        cx.run_until_parked();
         assert!(
             rendered_rows(cx) > 2,
-            "the stripe filler rows must render on the second frame, \
+            "the stripe filler rows must render on the next frame, \
              not only at the next unrelated render"
         );
+        let more = cx.update(|window, cx| window.simulate_next_frame(cx));
+        assert_eq!(more, 0, "a settled body height requests no more frames");
     }
 
     #[gpui::test]
