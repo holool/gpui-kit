@@ -57,11 +57,15 @@ jobs:
           components: clippy
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
       # Lints every member and, as a side effect, type-checks the example
-      # crates that the `test` job leaves out. The WebView example enables
-      # `gpui-kit/gpui-fast`, which feature unification would spread to every
-      # member, so it is linted on its own.
+      # crates that the `test` job leaves out. The WebView example is linted
+      # separately with its matching backend features.
+      # Holool's Kit defaults to Fast. Workspace feature unification also
+      # selects it for WebView, which must opt into the matching composition path.
       - name: Lint
-        run: cargo clippy --workspace --exclude gpui-shell --exclude webview --locked -- --deny warnings
+        run: >-
+          cargo clippy --workspace --exclude gpui-shell --exclude webview
+          --features gpui-kit/gpui-fast,gpui-webview/gpui-fast --locked
+          -- --deny warnings
       - name: Lint WebView (GPUI Fast)
         run: cargo clippy -p gpui-webview -p webview --features gpui-kit/gpui-fast,gpui-webview/gpui-fast --locked -- --deny warnings
 
