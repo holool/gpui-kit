@@ -210,3 +210,10 @@ Kit's backend explicitly; enable both Fast features together for composition.
 Target-device rendering, real mobile keyboards, native Windows/Linux UI and
 assistive-technology acceptance remain distinct from automated compile and
 headless checks. Current validation results are recorded in the sync PR.
+
+
+The upstream retained-frame fix makes the previous dock window refresh
+workaround unnecessary. The existing close-button setting transition passes
+with ordinary entity notification, so this sync removes the stored window and
+forced refresh. The rounded-table radius fixture now traverses rounded clip
+child scenes; all original header corner-radius assertions remain intact.

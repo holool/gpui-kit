@@ -2727,6 +2727,25 @@ mod tests {
             }
         }
 
+        // Rounded overflow groups now keep their primitives in child scenes.
+        // Inspect those quads as well, retaining the exact inset-radius checks.
+        fn header_quad(scene: &gpui::Scene, head: &gpui::Background) -> Option<gpui::Quad> {
+            scene
+                .quads
+                .iter()
+                .find(|quad| &quad.background == head)
+                .cloned()
+                .or_else(|| {
+                    scene
+                        .layers
+                        .frames
+                        .iter()
+                        .filter(|layer| layer.tile_size == 0)
+                        .filter_map(|layer| layer.content.scene())
+                        .find_map(|scene| header_quad(scene, head))
+                })
+        }
+
         for scroll in [false, true] {
             let mode = if scroll { "scroll" } else { "wrap" };
             let mut app = TestApp::new();
@@ -2742,16 +2761,13 @@ mod tests {
 
             let (quad, scale) = window.update(|_, window, _| {
                 let head: gpui::Background = gpui::rgb(HEAD_BACKGROUND).into();
-                let quad = window
-                    .painted_quads()
-                    .into_iter()
-                    .find(|quad| quad.background == head)
+                let quad = header_quad(window.painted_scene(), &head)
                     .unwrap_or_else(|| panic!("{mode}: the header background quad is painted"));
                 (quad, window.scale_factor())
             });
 
-            // GPUI clips children with a rectangular mask, so the header fill
-            // must carry the frame radius itself, inset by the 1px border.
+            // The header fill carries its own radius, inset by the 1px border,
+            // independently of the outer frame's overflow clip.
             let expected = px(RADIUS - 1.).scale(scale);
             assert_eq!(quad.corner_radii.top_left, expected, "{mode}: top left");
             assert_eq!(quad.corner_radii.top_right, expected, "{mode}: top right");
