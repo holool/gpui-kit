@@ -83,6 +83,9 @@ fn mount(
 
 fn draw(context: &mut VisualTestContext, view: Entity<gpui_shell::ScriptView>) {
     drop(view);
+    // A full click can paint the pressed tree before its release toggles it.
+    // This forced frame is the observation under test; discard earlier rows.
+    collections::test_probe::take_rows();
     context.update(|window, cx| {
         window.refresh();
         window.draw(cx).clear(cx)
@@ -140,8 +143,7 @@ export default class App extends View {
     .child(new TreeItem("readme", "README").disabled(true)); }
 }
 "#;
-    // Mount and input dispatch can already paint a frame. Clear before the
-    // action so retained redraws do not discard its actual observations.
+    // `draw` observes the completed native frame after input dispatch.
     collections::test_probe::take_rows();
     let (mut context, view, _app) = mount(cx, source);
     draw(&mut context, view.clone());

@@ -1862,6 +1862,7 @@ mod line_bounds_tests {
     #[cfg(target_os = "macos")]
     #[test]
     fn native_rtl_copy_snapshot_preserves_hard_and_soft_wrap_source_offsets() {
+        use gpui::{Directional as _, ParentElement as _, Styled as _};
         let mut app = gpui::TestApp::with_text_system(gpui_fast_macos::text_system_for_tests());
         crate::text::inline::test_draw::in_prepaint(&mut app, |window, cx| {
             for text in [
@@ -1879,7 +1880,11 @@ mod line_bounds_tests {
                     &[],
                 ));
                 let layout = styled.layout().clone();
-                let mut element = styled.into_any_element();
+                let mut element = gpui::div()
+                    .rtl()
+                    .w(px(55.))
+                    .child(styled)
+                    .into_any_element();
                 element.layout_as_root(
                     gpui::size(
                         gpui::AvailableSpace::Definite(px(55.)),
