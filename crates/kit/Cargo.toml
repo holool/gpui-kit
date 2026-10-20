@@ -1,6 +1,6 @@
 [package]
 name = "gpui-kit"
-version = "0.7.3"
+version = "0.8.0"
 description = "GPUI Kit: one dependency for building desktop applications with GPUI, GPUI Base, GPUI Component and default assets."
 keywords = ["desktop", "gpui", "shadcn", "ui", "uikit"]
 categories = ["gui"]
@@ -94,10 +94,10 @@ gpui_web.workspace = true
 gpui-fast-web = { workspace = true, optional = true }
 
 [target.'cfg(target_os = "ios")'.dependencies]
-gpui-ios = { package = "gpui_ios", git = "https://github.com/holool/gpui_ios", rev = "d834c3b3f2faaa63bb9ba05e8756c8d681f68ddc", optional = true }
+gpui-ios = { package = "gpui_ios", git = "https://github.com/holool/gpui_ios", rev = "9e4db412b3a59a4cfd4a20c4faea6706f58e6483", optional = true }
 
 [target.'cfg(target_os = "android")'.dependencies]
-gpui-android = { package = "gpui_android", git = "https://github.com/holool/gpui_android", rev = "7d150f96ac52f1d1cec9372a0c59176ef221249d", optional = true }
+gpui-android = { package = "gpui_android", git = "https://github.com/holool/gpui_android", rev = "1d79779ddbcfe40387a29a317c5aca2009f44c25", optional = true }
 
 [dev-dependencies]
 chrono = "0.4.38"

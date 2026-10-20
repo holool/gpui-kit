@@ -1,4 +1,6 @@
 mod document;
+pub mod editor_host;
+mod editor_seam;
 mod format;
 mod inline;
 mod inline_element;
@@ -6,6 +8,7 @@ mod inline_flow;
 mod inline_object;
 #[cfg(test)]
 mod inline_virtual_tests;
+mod line_snapshot;
 mod markdown_ext;
 mod node;
 mod range_highlight;

@@ -10,6 +10,7 @@ use gpui::{
     Render, ScrollHandle, ScrollWheelEvent, SharedString, Styled as _, Subscription,
     UTF16Selection, WeakFocusHandle, Window, actions, div, point, prelude::FluentBuilder as _, px,
 };
+use gpui::{Autocapitalize, TextInputAction, TextInputConfiguration};
 use ropey::{Rope, RopeSlice};
 use serde::Deserialize;
 use std::borrow::Cow;
@@ -352,6 +353,8 @@ pub struct PrepaintCaretGeometry {
     line_height: Pixels,
     input_bounds: Bounds<Pixels>,
     scroll_offset: Point<Pixels>,
+    /// A resize owns visibility while its requested repaint settles.
+    pub(super) resize_reveal_owned: bool,
 }
 
 impl PrepaintCaretGeometry {
@@ -366,6 +369,7 @@ impl PrepaintCaretGeometry {
             line_height,
             input_bounds,
             scroll_offset,
+            resize_reveal_owned: false,
         }
     }
 
@@ -474,6 +478,10 @@ pub struct InputBaseState<M: InputModeKind> {
     pub(super) masked: bool,
     pub(super) clean_on_escape: bool,
     pub(super) submit_on_enter: bool,
+    /// Overrides for [`Self::text_input_configuration`].
+    pub(super) input_action: Option<TextInputAction>,
+    pub(super) autocorrect: Option<bool>,
+    pub(super) autocapitalize: Option<Autocapitalize>,
     pub(super) show_whitespaces: bool,
     /// This flag tells the renderer to prefer the end of the current visual line.
     pub(crate) cursor_line_end_affinity: bool,
@@ -649,6 +657,49 @@ impl<M: InputModeKind> InputBaseState<M> {
 
     pub fn text_bounds(&self) -> Option<Bounds<Pixels>> {
         self.last_bounds
+    }
+
+    /// The cached display map for querying wrapped rows and display positions.
+    ///
+    /// Reading this does not prepare text or force layout. Before the first
+    /// layout, [`DisplayMap::wrap_row_count`] can be zero; prepared empty text
+    /// has one row. The count describes content, independent of minimum rows,
+    /// auto-grow limits and viewport height.
+    ///
+    /// Text edits use the cached wrapping parameters. Layout refreshes the
+    /// cache after width or font changes; consume that count on a subsequent
+    /// render, or use [`Self::prewrap`] to prepare it before the first layout.
+    pub fn display_map(&self) -> &DisplayMap {
+        &self.display_map
+    }
+
+    /// Wrap the text for `font`, `font_size` and `width` before the first
+    /// layout, so that [`DisplayMap::wrap_row_count`] is known on the first frame.
+    ///
+    /// Call it after setting the value and the wrapping indent. `width` is the
+    /// width of the input's text area: its width less its padding, and less
+    /// the line-number gutter for an editor with line numbers. It wraps as
+    /// layout does, a little short of that width and with the state's wrapping
+    /// indent. Once the input has been laid out this does nothing, and layout
+    /// keeps the wrap up to date. The font and font size must match the input's
+    /// actual text style.
+    pub fn prewrap(
+        &mut self,
+        font: gpui::Font,
+        font_size: Pixels,
+        width: Pixels,
+        cx: &mut Context<Self>,
+    ) {
+        if self.last_layout.is_some() {
+            return;
+        }
+        let wrap_width = (width - RIGHT_MARGIN).max(px(1.));
+        self.display_map.set_font(font, font_size, cx);
+        self.display_map
+            .on_layout_changed(self.soft_wrap.then_some(wrap_width), cx);
+        self.display_map
+            .set_wrapping_indent(self.wrapping_indent, cx);
+        self.display_map.ensure_text_prepared(&self.text, cx);
     }
 
     pub fn diagnostic_popover(&self) -> Option<Rc<crate::input::DiagnosticEntry>> {
@@ -846,6 +897,9 @@ impl<M: InputModeKind> InputBaseState<M> {
             masked: false,
             clean_on_escape: false,
             submit_on_enter: false,
+            input_action: None,
+            autocorrect: None,
+            autocapitalize: None,
             show_whitespaces: false,
             loading: false,
             pattern: None,
@@ -1243,6 +1297,8 @@ impl<M: InputModeKind> InputBaseState<M> {
     }
 
     /// Set true to clear the input by pressing Escape key.
+    ///
+    /// Not on Android, where Escape is also the back button.
     pub fn clean_on_escape(mut self) -> Self {
         self.clean_on_escape = true;
         self
@@ -1265,6 +1321,59 @@ impl<M: InputModeKind> InputBaseState<M> {
     pub fn set_submit_on_enter(&mut self, submit: bool, cx: &mut Context<Self>) {
         self.submit_on_enter = submit;
         cx.notify();
+    }
+
+    /// Set the action a software keyboard shows on its enter key, like Search
+    /// or Send. Pressing it still emits [`InputEvent::PressEnter`].
+    ///
+    /// Default is [`TextInputAction::Done`] for a single-line input (and a
+    /// multi-line one that submits on enter), and [`TextInputAction::Enter`]
+    /// (a line break) for a multi-line input.
+    pub fn input_action(mut self, action: TextInputAction) -> Self {
+        self.input_action = Some(action);
+        self
+    }
+
+    /// Set whether the platform may autocorrect the text and offer word
+    /// suggestions.
+    ///
+    /// Default is `false`. Enable this explicitly for fields that accept prose;
+    /// masking or revealing text does not change the setting.
+    pub fn autocorrect(mut self, autocorrect: bool) -> Self {
+        self.autocorrect = Some(autocorrect);
+        self
+    }
+
+    /// Set how a software keyboard capitalizes the text.
+    ///
+    /// Default is [`Autocapitalize::None`]. Enable capitalization explicitly for
+    /// fields where it is appropriate, independently of autocorrection.
+    pub fn autocapitalize(mut self, autocapitalize: Autocapitalize) -> Self {
+        self.autocapitalize = Some(autocapitalize);
+        self
+    }
+
+    /// The text assistance a platform IME (a software keyboard) should give
+    /// this input, from [`Self::input_action`], [`Self::autocorrect`] and
+    /// [`Self::autocapitalize`] or the defaults they describe.
+    pub fn text_input_configuration(&self) -> TextInputConfiguration {
+        // Masking is a presentation choice, not a reliable content type: a
+        // revealed password must not acquire text assistance. Keep assistance
+        // opt-in for structured fields such as passwords, email and URLs.
+        let autocorrect = self.autocorrect.unwrap_or(false);
+        let input_action =
+            self.input_action
+                .unwrap_or(if self.is_multi_line() && !self.submit_on_enter {
+                    TextInputAction::Enter
+                } else {
+                    TextInputAction::Done
+                });
+        TextInputConfiguration {
+            autocorrect,
+            autocapitalize: self.autocapitalize.unwrap_or(Autocapitalize::None),
+            suggestions: autocorrect,
+            input_action,
+        }
     }
 
     /// Set whether to show whitespace characters.
@@ -1317,7 +1426,10 @@ impl<M: InputModeKind> InputBaseState<M> {
     ///
     /// - `None` (default): [`BOTTOM_MARGIN_ROWS`] lines, falling back to
     ///   one line on small viewports.
-    /// - `Some(n)`: exactly `n` lines, clamped to half the viewport.
+    /// - `Some(n)`: requests `n` lines, clamped to half the viewport.
+    ///
+    /// In a constrained viewport, edge clearance yields to the cursor's
+    /// complete visual row so surrounding space cannot clip the text being edited.
     pub fn cursor_surrounding_lines(mut self, lines: Option<usize>) -> Self {
         self.cursor_surrounding_lines = lines;
         self
@@ -2223,7 +2335,9 @@ impl<M: InputModeKind> InputBaseState<M> {
             self.unmark_text(window, cx);
         }
 
-        if self.clean_on_escape {
+        // Android delivers its back button as escape, and back leaves a field's
+        // text alone: it closes what is open or navigates.
+        if self.clean_on_escape && !cfg!(target_os = "android") {
             return self.clean(window, cx);
         }
 
@@ -2784,10 +2898,10 @@ impl<M: InputModeKind> InputBaseState<M> {
         let row = point.row;
 
         // Resolve the wrapped row even when the target is outside the last layout.
-        let display_pos = self
+        let display_row = self
             .display_map
-            .buffer_pos_to_display_pos(crate::input::BufferPoint::new(row, point.column));
-        let row_offset_y = line_height * display_pos.row;
+            .offset_to_display_row(offset, self.line_end_affinity_at(offset));
+        let row_offset_y = line_height * display_row;
 
         // For Right alignment use 0 margin: the cursor indicator is clamped inside bounds
         // in layout_cursors, so shifting the text here would cause a first-click visual jump.
@@ -2828,15 +2942,15 @@ impl<M: InputModeKind> InputBaseState<M> {
                     line_height,
                 )
             } else {
-                line_height
+                px(0.)
             };
-        if row_offset_y - edge_height + line_height < -scroll_offset.y {
-            // Scroll up
-            scroll_offset.y = -row_offset_y + edge_height - line_height;
-        } else if row_offset_y + edge_height > -scroll_offset.y + bounds.size.height {
-            // Scroll down
-            scroll_offset.y = -(row_offset_y - bounds.size.height + edge_height);
-        }
+        scroll_offset.y = super::element::reveal_row(
+            scroll_offset.y,
+            row_offset_y,
+            line_height,
+            bounds.size.height,
+            edge_height,
+        );
 
         // Avoid necessary scroll, when it was already in the correct position.
         if direction == Some(MoveDirection::Up) {
@@ -4728,6 +4842,14 @@ impl<M: InputModeKind> EntityInputHandler for InputBaseState<M> {
 
         None
     }
+
+    fn text_input_configuration(
+        &mut self,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) -> TextInputConfiguration {
+        InputBaseState::text_input_configuration(self)
+    }
 }
 
 impl<M: InputModeKind> Focusable for InputBaseState<M> {
@@ -4907,6 +5029,76 @@ impl<M: InputModeKind> Render for InputBaseState<M> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[gpui::test]
+    fn revealing_a_password_keeps_text_assistance_disabled(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        cx.open_window(size(px(400.), px(100.)), |window, cx| {
+            let state = cx.new(|cx| crate::input::InputState::new(window, cx).masked(true));
+            let hidden = state.read(cx).text_input_configuration();
+            assert!(!hidden.autocorrect && !hidden.suggestions);
+            assert_eq!(hidden.autocapitalize, Autocapitalize::None);
+
+            // The component's reveal button uses this same state transition.
+            state.update(cx, |state, cx| state.toggle_masked(window, cx));
+            assert_eq!(state.read(cx).text_input_configuration(), hidden);
+            state.update(cx, |state, cx| state.toggle_masked(window, cx));
+            assert_eq!(state.read(cx).text_input_configuration(), hidden);
+            gpui::EmptyView
+        });
+    }
+
+    #[gpui::test]
+    fn text_input_configuration_follows_the_input(cx: &mut TestAppContext) {
+        use crate::input::{InputState, TextareaState};
+
+        cx.update(crate::init);
+        let mut states = None;
+        cx.open_window(size(px(400.), px(100.)), |window, cx| {
+            states = Some((
+                cx.new(|cx| InputState::new(window, cx)),
+                cx.new(|cx| InputState::new(window, cx).masked(true)),
+                cx.new(|cx| TextareaState::new(window, cx)),
+                cx.new(|cx| {
+                    InputState::new(window, cx)
+                        .input_action(TextInputAction::Search)
+                        .autocorrect(true)
+                        .autocapitalize(Autocapitalize::Words)
+                }),
+            ));
+            gpui::EmptyView
+        });
+        let (plain, masked, textarea, search) = states.unwrap();
+
+        cx.read(|cx| {
+            assert_eq!(
+                plain.read(cx).text_input_configuration(),
+                TextInputConfiguration {
+                    input_action: TextInputAction::Done,
+                    ..Default::default()
+                }
+            );
+            assert_eq!(
+                masked.read(cx).text_input_configuration(),
+                TextInputConfiguration {
+                    input_action: TextInputAction::Done,
+                    ..Default::default()
+                }
+            );
+            assert_eq!(
+                textarea.read(cx).text_input_configuration(),
+                TextInputConfiguration {
+                    input_action: TextInputAction::Enter,
+                    ..Default::default()
+                }
+            );
+            let search = search.read(cx).text_input_configuration();
+            assert_eq!(search.input_action, TextInputAction::Search);
+            assert_eq!(search.autocapitalize, Autocapitalize::Words);
+            assert!(search.autocorrect);
+            assert!(search.suggestions);
+        });
+    }
 
     #[gpui::test]
     fn test_multicursor_unicode_completion_uses_post_edit_start(cx: &mut TestAppContext) {
@@ -8901,6 +9093,54 @@ mod tests {
     }
 
     #[gpui::test]
+    fn test_textarea_prewrap_prepares_content_rows_before_layout(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        for (value, expected_rows) in [("", 1), ("one\ntwo", 2)] {
+            cx.open_window(size(px(400.), px(100.)), |window, cx| {
+                let font = window.text_style().font();
+                cx.new(|cx| {
+                    let mut state = crate::input::TextareaState::new(window, cx)
+                        .rows(12)
+                        .default_value(value);
+                    assert_eq!(state.display_map().wrap_row_count(), 0);
+                    state.prewrap(font, px(14.), px(120.), cx);
+                    assert_eq!(state.display_map().wrap_row_count(), expected_rows);
+                    assert_eq!(state.value(), value);
+                    state
+                });
+                gpui::EmptyView
+            });
+        }
+    }
+
+    #[gpui::test]
+    fn test_textarea_prewrap_respects_soft_wrap_before_layout(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let value = "select id, name, email, phone from users where active\nlimit 10";
+        for soft_wrap in [true, false] {
+            cx.open_window(size(px(400.), px(100.)), |window, cx| {
+                let font = window.text_style().font();
+                cx.new(|cx| {
+                    let mut state = crate::input::TextareaState::new(window, cx)
+                        .rows(1)
+                        .soft_wrap(soft_wrap)
+                        .default_value(value);
+                    state.prewrap(font, px(14.), px(120.), cx);
+                    let rows = state.display_map().wrap_row_count();
+                    if soft_wrap {
+                        assert!(rows > 2, "the first logical line must wrap");
+                    } else {
+                        assert_eq!(rows, 2);
+                    }
+                    assert_eq!(state.value(), value);
+                    state
+                });
+                gpui::EmptyView
+            });
+        }
+    }
+
+    #[gpui::test]
     fn test_prewrap_counts_wrapped_rows_before_the_first_paint(cx: &mut TestAppContext) {
         cx.update(crate::init);
         let text = "select id, name, email, phone from users where active\nlimit 10";
@@ -11964,41 +12204,6 @@ impl InputBaseState<crate::input::EditorMode> {
             *l = line_number;
         }
         self
-    }
-
-    /// The editor's display map for querying wrapped rows and display positions.
-    ///
-    /// Text is prepared during layout or by [`Self::prewrap`].
-    pub fn display_map(&self) -> &DisplayMap {
-        &self.display_map
-    }
-
-    /// Wrap the text for `font`, `font_size` and `width` before the first
-    /// layout, so that [`DisplayMap::wrap_row_count`] is known on the first frame.
-    ///
-    /// Call it after setting the value and the wrapping indent. `width` is the
-    /// width of the editor's text area: its width less its padding, and less
-    /// the line-number gutter when line numbers are shown. It wraps as layout
-    /// does, a little short of that width and with the state's wrapping
-    /// indent. Once the editor has been laid out this does nothing, and layout
-    /// keeps the wrap up to date.
-    pub fn prewrap(
-        &mut self,
-        font: gpui::Font,
-        font_size: Pixels,
-        width: Pixels,
-        cx: &mut Context<Self>,
-    ) {
-        if self.last_layout.is_some() {
-            return;
-        }
-        let wrap_width = (width - RIGHT_MARGIN).max(px(1.));
-        self.display_map.set_font(font, font_size, cx);
-        self.display_map
-            .on_layout_changed(self.soft_wrap.then_some(wrap_width), cx);
-        self.display_map
-            .set_wrapping_indent(self.wrapping_indent, cx);
-        self.display_map.ensure_text_prepared(&self.text, cx);
     }
 
     /// Set line number.

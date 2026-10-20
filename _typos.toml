@@ -1,5 +1,6 @@
 [default]
-extend-ignore-re = ['\\u\{[0-9A-Fa-f]+\}']
+# Contributor handles in the imported release notes are identifiers.
+extend-ignore-re = ['\\u\{[0-9A-Fa-f]+\}', '@(?:UncertaintyDeterminesYou4ndMe|alex-vas)\b']
 
 [default.extend-words]
 # Official Lucide icon name for the astroid curve.

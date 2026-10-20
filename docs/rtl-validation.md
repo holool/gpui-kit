@@ -175,3 +175,55 @@ assertions. Its one ignored large benchmark is upstream's existing default.
 Native Windows, Linux GUI, OS IME, physical touch, and manual assistive-technology
 review are outside this local macOS validation; the PR retains platform CI and
 Holool's RTL CI steps.
+
+
+## October 20, 2026 upstream sync
+
+Merge longbridge/gpui-kit through `1676826d9d49b90f4d7b6808b69924f58796f6f1`
+(Kit 0.8.0), preserving Holool's Arabic editing, native bidi geometry,
+selection, controls, table stripe filler, RTL progress and mobile integration.
+Every runtime alias and compatibility package uses Holool Fast
+`c4e8f3c1b71741eb13eaa793e11561fc53deda35`; exact compatibility/macros remain
+0.3.9 and Fast remains in Kit's default features.
+
+The native adapters are coordinated at iOS
+`9e4db412b3a59a4cfd4a20c4faea6706f58e6483` and Android
+`1d79779ddbcfe40387a29a317c5aca2009f44c25`. Their examples use the same Fast
+revision. The engine preserves the Android GLES and exclusive-surface fixes
+while importing upstream's wgpu 30 renderer migration.
+
+CE's empty-directional-source crash is addressed at the equivalent Fast
+boundary: its existing source-empty guard runs before inserting a direction
+marker. Native CoreText and isolated-font Cosmic regressions exercise empty
+source with no font runs, zero-length runs, both directions, cached calls and
+wrapping. The Kit regression mounts empty Input/Textarea fields, changes
+inherited direction, adds/removes Arabic text and placeholders, and draws
+multiple retained frames while checking source lengths and caret offsets.
+No CE/Parley backend or legacy gpui-arabic dependency is introduced.
+
+Resolve upstream's immutable copy-selection geometry with Holool's physical
+RTL row extents. Preserve our exact-duration motion helper (upstream now has
+the equivalent precision fix). Import the new tooltip trigger-removal behavior
+and its retained-frame-compatible tests. Upstream's WebView feature now follows
+Kit's backend explicitly; enable both Fast features together for composition.
+
+Target-device rendering, real mobile keyboards, native Windows/Linux UI and
+assistive-technology acceptance remain distinct from automated compile and
+headless checks. Current validation results are recorded in the sync PR.
+
+
+The upstream retained-frame fix makes the previous dock window refresh
+workaround unnecessary. The existing close-button setting transition passes
+with ordinary entity notification, so this sync removes the stored window and
+forced refresh. The rounded-table radius fixture now traverses rounded clip
+child scenes; all original header corner-radius assertions remain intact.
+
+
+Upstream's new immutable selection and editor-host snapshots assumed a newline
+between every shaped line. Fast's independent RTL soft rows invalidate that
+assumption. A private shared source-range mapping now consumes bytes only for
+actual newlines, gives a soft-boundary caret to the next row, and preserves
+native source-byte hit testing. Fast's existing `TextLayout::text()` getter
+also omits synthetic soft-wrap separators. Native CoreText regressions cover
+hard/soft wrapping, empty text, copy snapshots and external-editor snapshots;
+no additional public API is introduced.
