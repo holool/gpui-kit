@@ -50,14 +50,14 @@ publish = false
 edition = "2024"
 
 [workspace.dependencies]
-gpui-kit = { path = "crates/kit", version = "0.7.3" }
-gpui-component = { path = "crates/component", version = "0.7.3" }
-gpui-base = { path = "crates/base", version = "0.7.3" }
-gpui-component-macros = { path = "crates/component-macros", version = "0.7.3" }
-gpui-kit-assets = { path = "crates/assets", version = "0.7.3" }
-gpui-fps = { path = "crates/fps", version = "0.7.3" }
-gpui-shell = { path = "crates/shell", version = "0.7.3" }
-gpui-webview = { path = "crates/webview", version = "0.7.3" }
+gpui-kit = { path = "crates/kit", version = "0.8.0" }
+gpui-component = { path = "crates/component", version = "0.8.0" }
+gpui-base = { path = "crates/base", version = "0.8.0" }
+gpui-component-macros = { path = "crates/component-macros", version = "0.8.0" }
+gpui-kit-assets = { path = "crates/assets", version = "0.8.0" }
+gpui-fps = { path = "crates/fps", version = "0.8.0" }
+gpui-shell = { path = "crates/shell", version = "0.8.0" }
+gpui-webview = { path = "crates/webview", version = "0.8.0" }
 story = { path = "crates/story" }
 
 # Holool pins every GPUI runtime dependency to one Fast revision. The gpui-pre stand-ins
@@ -65,19 +65,19 @@ story = { path = "crates/story" }
 # Fast's underlying types, including for consumers without default features.
 # Keep Kit-aware procedural macros from its matching published snapshot; they
 # generate paths through the facade and carry no runtime types.
-gpui = { git = "https://github.com/holool/gpui-fast", rev = "892ef445f5d2851f542514b76dbce7c9b1ebeeee", package = "gpui-pre", version = "=0.3.9" }
-gpui_platform = { git = "https://github.com/holool/gpui-fast", rev = "892ef445f5d2851f542514b76dbce7c9b1ebeeee", package = "gpui-pre-platform", version = "=0.3.9", features = ["font-kit", "x11", "wayland", "runtime_shaders"] }
-gpui_web = { git = "https://github.com/holool/gpui-fast", rev = "892ef445f5d2851f542514b76dbce7c9b1ebeeee", package = "gpui-pre-web", version = "=0.3.9" }
+gpui = { git = "https://github.com/holool/gpui-fast", rev = "4152f0914665ffe06be31820e3f48ca4be39227c", package = "gpui-pre", version = "=0.3.9" }
+gpui_platform = { git = "https://github.com/holool/gpui-fast", rev = "4152f0914665ffe06be31820e3f48ca4be39227c", package = "gpui-pre-platform", version = "=0.3.9", features = ["font-kit", "x11", "wayland", "runtime_shaders"] }
+gpui_web = { git = "https://github.com/holool/gpui-fast", rev = "4152f0914665ffe06be31820e3f48ca4be39227c", package = "gpui-pre-web", version = "=0.3.9" }
 # Holool selects Fast by default. Compatibility crates below share the same engine.
 # Explicit package fields make Cargo use these dependency keys as Rust crate names;
 # the packages declare the same library names as the pre backend.
-gpui-fast = { git = "https://github.com/holool/gpui-fast", rev = "892ef445f5d2851f542514b76dbce7c9b1ebeeee", package = "gpui", features = ["windows-manifest-provided-by-host"] }
-gpui-fast-platform = { git = "https://github.com/holool/gpui-fast", rev = "892ef445f5d2851f542514b76dbce7c9b1ebeeee", package = "gpui_platform", features = ["font-kit", "x11", "wayland", "runtime_shaders"] }
-gpui-fast-macos = { package = "gpui_macos", git = "https://github.com/holool/gpui-fast", rev = "892ef445f5d2851f542514b76dbce7c9b1ebeeee", features = ["font-kit", "runtime_shaders", "test-support"] }
-gpui-fast-web = { git = "https://github.com/holool/gpui-fast", rev = "892ef445f5d2851f542514b76dbce7c9b1ebeeee", package = "gpui_web" }
+gpui-fast = { git = "https://github.com/holool/gpui-fast", rev = "4152f0914665ffe06be31820e3f48ca4be39227c", package = "gpui", features = ["windows-manifest-provided-by-host"] }
+gpui-fast-platform = { git = "https://github.com/holool/gpui-fast", rev = "4152f0914665ffe06be31820e3f48ca4be39227c", package = "gpui_platform", features = ["font-kit", "x11", "wayland", "runtime_shaders"] }
+gpui-fast-macos = { package = "gpui_macos", git = "https://github.com/holool/gpui-fast", rev = "4152f0914665ffe06be31820e3f48ca4be39227c", features = ["font-kit", "runtime_shaders", "test-support"] }
+gpui-fast-web = { git = "https://github.com/holool/gpui-fast", rev = "4152f0914665ffe06be31820e3f48ca4be39227c", package = "gpui_web" }
 gpui_macros = { package = "gpui-pre-macros", version = "=0.3.9" }
-reqwest_client = { git = "https://github.com/holool/gpui-fast", rev = "892ef445f5d2851f542514b76dbce7c9b1ebeeee", package = "gpui-pre-reqwest-client", version = "=0.3.9" }
-sum-tree = { git = "https://github.com/holool/gpui-fast", rev = "892ef445f5d2851f542514b76dbce7c9b1ebeeee", package = "gpui-pre-sum-tree", version = "=0.3.9" }
+reqwest_client = { git = "https://github.com/holool/gpui-fast", rev = "4152f0914665ffe06be31820e3f48ca4be39227c", package = "gpui-pre-reqwest-client", version = "=0.3.9" }
+sum-tree = { git = "https://github.com/holool/gpui-fast", rev = "4152f0914665ffe06be31820e3f48ca4be39227c", package = "gpui-pre-sum-tree", version = "=0.3.9" }
 reqwest = { package = "gpui-pre-reqwest", version = "=0.12.15", default-features = false, features = [
     "charset",
     "http2",

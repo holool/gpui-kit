@@ -229,6 +229,9 @@ pub(super) struct Inline {
     /// The shaped text is in the table, not in `styled_text`, until paint
     /// takes it back.
     handed_over: bool,
+    /// A fragment of an editor leaf laid out by `InlineFlow`: the leaf's key
+    /// and the leaf byte offset of this text's index 0.
+    editor_piece: Option<(u64, usize)>,
 
     state: Arc<Mutex<InlineState>>,
 }
@@ -239,6 +242,10 @@ pub(crate) struct InlineState {
     /// The text that actually rendering, matched with selection.
     pub(super) text: SharedString,
     pub(super) selection: Option<Selection>,
+    /// Set only through the editor host API (`Paragraph::with_leaf_key`):
+    /// the leaf reports its geometry to the collector installed by
+    /// `editor_host::collect_leaf_geometry`. `None` for every plain `TextView`.
+    pub(crate) editor_key: Option<u64>,
 }
 
 /// One frame's [`StyledText`], kept for the next frame's [`Inline`] of the
@@ -316,7 +323,124 @@ impl InlineState {
     }
 }
 
+/// The native lines and placement of a completed paint. `TextLayout::clone`
+/// shares mutable measurement state; these immutable shaped lines do not.
+struct PaintedSelectionLayout {
+    lines: smallvec::SmallVec<[Arc<gpui::WrappedLineLayout>; 1]>,
+    bounds: Bounds<Pixels>,
+    line_height: Pixels,
+    len: usize,
+}
+
+impl PaintedSelectionLayout {
+    fn new(layout: &TextLayout) -> Self {
+        Self {
+            lines: layout.line_layouts(),
+            bounds: layout.bounds(),
+            line_height: layout.line_height(),
+            len: layout.len(),
+        }
+    }
+
+    fn position_for_index(&self, index: usize) -> Option<Point<Pixels>> {
+        let mut origin = self.bounds.origin;
+        let mut start = 0;
+        for line in &self.lines {
+            let end = start + line.len();
+            if index < start {
+                break;
+            }
+            if index <= end {
+                return Some(origin + line.position_for_index(index - start, self.line_height)?);
+            }
+            origin.y += line.size(self.line_height).height;
+            start = end + 1;
+        }
+        None
+    }
+
+    fn rows_extent(&self) -> (Pixels, Pixels) {
+        let top = self.bounds.top();
+        let mut last_line_top = top;
+        for line in self.lines.iter().take(self.lines.len().saturating_sub(1)) {
+            last_line_top += line.size(self.line_height).height;
+        }
+        let last_row_top = self.lines.last().map_or(top, |line| {
+            last_line_top + line.wrap_boundaries.len() as f32 * self.line_height
+        });
+        (top, last_row_top + self.line_height)
+    }
+}
+
+/// Targets the document-owned source state, never an ephemeral flow fragment.
+pub(super) struct InlineSelectionProjection {
+    source: Weak<Mutex<InlineState>>,
+    range: Range<usize>,
+    text: SharedString,
+    layout: PaintedSelectionLayout,
+    selection_bounds: Option<Bounds<Pixels>>,
+}
+
+impl InlineSelectionProjection {
+    pub(super) fn reset(&self) {
+        if let Some(source) = self.source.upgrade()
+            && let Ok(mut source) = source.lock()
+        {
+            source.selection = None;
+        }
+    }
+
+    pub(super) fn project(&self, start: Point<Pixels>, end: Point<Pixels>) {
+        let Some(source) = self.source.upgrade() else {
+            return;
+        };
+        let selection =
+            project_selection(&self.text, &self.layout, self.selection_bounds, start, end);
+        if let Some(selection) = selection
+            && let Ok(mut source) = source.lock()
+        {
+            let start = self.range.start + selection.start;
+            let end = self.range.start + selection.end;
+            source.selection = Some(match source.selection {
+                Some(previous) => Selection::new(previous.start.min(start), previous.end.max(end)),
+                None => Selection::new(start, end),
+            });
+        }
+    }
+}
+
 impl Inline {
+    /// Editor seam (design D3): report this leaf's layout and take the
+    /// editor's backgrounds. Inert unless the state carries an editor key
+    /// and an editor sink is installed.
+    fn report_to_editor(&mut self) {
+        // The sink (a thread-local read) is checked first: outside an
+        // editor's prepaint no lock is taken.
+        let Some(sink) = super::editor_seam::current() else {
+            return;
+        };
+        if let Some((key, start)) = self.editor_piece {
+            let layout = self.styled_text.layout();
+            let end = start + layout.len();
+            sink.report_text_piece(key, start, layout);
+            self.range_backgrounds
+                .extend(
+                    sink.backgrounds(key)
+                        .into_iter()
+                        .filter_map(|(range, color)| {
+                            let (lo, hi) = (range.start.max(start), range.end.min(end));
+                            (lo < hi).then(|| (lo - start..hi - start, color))
+                        }),
+                );
+            return;
+        }
+        let Some(key) = self.state.lock().ok().and_then(|state| state.editor_key) else {
+            return;
+        };
+        sink.report(key, self.styled_text.layout());
+        self.range_backgrounds.extend(sink.backgrounds(key));
+    }
+
     /// Hands the shaped text to the next frame (see [`RetainedLayout`]).
     /// Called after prepaint, so an element that is laid out but never
     /// painted (scrolled out of view) keeps its layout too; paint takes it
@@ -386,6 +510,7 @@ impl Inline {
             link_click_handler,
             retained_key: None,
             handed_over: false,
+            editor_piece: None,
             state,
         }
     }
@@ -393,6 +518,13 @@ impl Inline {
     /// Use the resolved style captured by a deferred parent layout.
     pub(super) fn text_style(mut self, text_style: TextStyle) -> Self {
         self.text_style = Some(text_style);
+        self
+    }
+
+    /// Report this text as a fragment of the editor leaf `key`, starting at
+    /// the leaf's byte `start` (see `report_to_editor`).
+    pub(super) fn editor_piece(mut self, piece: Option<(u64, usize)>) -> Self {
+        self.editor_piece = piece;
         self
     }
 
@@ -524,7 +656,6 @@ impl Inline {
         &self,
         text_layout: &TextLayout,
         bounds: &Bounds<Pixels>,
-        window: &mut Window,
         cx: &mut App,
     ) -> (bool, bool, Option<Selection>) {
         let Some(text_view_state) = GlobalState::global(cx).text_view_state() else {
@@ -587,97 +718,17 @@ impl Inline {
         let Some((selection_start, selection_end)) = text_view_state.selection_points(cx) else {
             return (is_selectable, false, None);
         };
-        let line_height = window.line_height();
-
-        // Use for debug selection bounds
-        // self.paint_selected_bounds(Bounds::from_corners(selection_start, selection_end), window, cx);
-
-        // NOTE: the selection is computed purely from the geometric band
-        // (`selection_start`..`selection_end`), NOT from what is currently
-        // visible. Every glyph of a *painted* element is laid out (its
-        // `position_for_index` is valid) even when it is scrolled out of, or
-        // clipped by, an ancestor's viewport — the content mask only clips the
-        // painted pixels. Because the copied text is derived from
-        // `InlineState.selection`, gating the selection on `content_mask` here
-        // used to drop scrolled-out-but-selected glyphs, so a selection taller
-        // than the viewport (e.g. a long chat message, or a drag with
-        // auto-scroll) copied only the portion that happened to be on screen.
-        //
-        // This does not resurrect the #2156 clipped-hit-testing behavior: a
-        // selection can only START on visible text (window selection resolves
-        // endpoints with hitbox hover testing against visible Inline bounds),
-        // so the band's endpoints are always anchored to on-screen text.
-        // Content that is merely `overflow_hidden`
-        // (not scrolled) lies outside that band and is still excluded, while
-        // the highlight quads painted for off-screen glyphs are clipped away by
-        // GPUI's content mask as before.
-        //
-        // Each character is tested with its row's top and height, so an inline
-        // whose rows all miss the band, or all lie strictly inside it with no
-        // endpoint on any row, has the same answer for every character. Decide
-        // those without the walk below, which scans the layout twice per
-        // character: one long code block alone made every paint of a held
-        // selection cost tens of milliseconds.
-        if self.text.is_empty() {
-            return (true, true, None);
-        }
-        let (rows_top, rows_bottom) = match self.selection_bounds {
-            Some(bounds) => (bounds.top(), bounds.top() + bounds.size.height),
-            None => text_rows_extent(text_layout, line_height),
-        };
-        let band_top = selection_start.y.min(selection_end.y);
-        let band_bottom = selection_start.y.max(selection_end.y);
-        if rows_bottom <= band_top || rows_top > band_bottom {
-            return (true, true, None);
-        }
-        if band_top < rows_top && band_bottom >= rows_bottom && text_layout.len() >= self.text.len()
-        {
-            return (true, true, Some((0..self.text.len()).into()));
-        }
-
-        let mut selection: Option<Selection> = None;
-        let mut offset = 0;
-        let mut chars = self.text.chars().peekable();
-        while let Some(c) = chars.next() {
-            let Some(pos) = text_layout.position_for_index(offset) else {
-                offset += c.len_utf8();
-                continue;
-            };
-
-            let next_offset = offset + c.len_utf8();
-            let mut char_width = line_height.half();
-            if let Some(next_pos) = text_layout.position_for_index(next_offset) {
-                if next_pos.y == pos.y {
-                    char_width = next_pos.x - pos.x;
-                }
-            }
-
-            let selection_pos = self
-                .selection_bounds
-                .map_or(pos, |bounds| point(pos.x, bounds.top()));
-            let selection_height = self
-                .selection_bounds
-                .map_or(line_height, |bounds| bounds.size.height);
-            if point_in_text_selection(
-                selection_pos,
-                char_width,
+        (
+            true,
+            true,
+            project_selection(
+                &self.text,
+                text_layout,
+                self.selection_bounds,
                 selection_start,
                 selection_end,
-                selection_height,
-            ) {
-                if selection.is_none() {
-                    selection = Some((offset..offset).into());
-                }
-
-                if let Some(selection) = selection.as_mut() {
-                    selection.end = next_offset;
-                }
-            }
-
-            offset = next_offset;
-        }
-
-        (true, true, selection)
+            ),
+        )
     }
 
     /// One box per laid-out row, from the row's start to its last character,
@@ -694,12 +745,12 @@ impl Inline {
     /// to a character whose successor sits on the next row, and the selection
     /// geometry was tuned against it.
     fn text_line_bounds(
-        text_layout: &TextLayout,
+        text_layout: &PaintedSelectionLayout,
         line_height: Pixels,
         mask_bounds: Bounds<Pixels>,
     ) -> Vec<Bounds<Pixels>> {
-        let origin = text_layout.bounds().origin;
-        let lines = text_layout.line_layouts();
+        let origin = text_layout.bounds.origin;
+        let lines = &text_layout.lines;
         let row_count: usize = lines
             .iter()
             .map(|line| line.wrap_boundaries.len() + 1)
@@ -707,7 +758,7 @@ impl Inline {
         let mut line_bounds = Vec::with_capacity(row_count);
         let mut row_ix = 0;
         let mut y = origin.y;
-        for line in &lines {
+        for line in lines {
             let layout = &line.unwrapped_layout;
             let mut row_start = 0;
             let row_ends = line
@@ -924,6 +975,7 @@ impl Element for Inline {
         let bounds = Bounds::new(self.paint_origin.unwrap_or(bounds.origin), bounds.size);
         self.styled_text
             .prepaint(id, inspector_id, bounds, &mut (), window, cx);
+        self.report_to_editor();
 
         // Report this element's laid-out extent so an ancestor TextView with
         // `max_lines` can snap its clip to a whole-line boundary. The state
@@ -976,7 +1028,7 @@ impl Element for Inline {
 
         // layout selections
         let (is_selectable, is_selection, selection) =
-            self.layout_selections(&text_layout, &bounds, window, cx);
+            self.layout_selections(&text_layout, &bounds, cx);
 
         let Ok(mut state) = self.state.lock() else {
             _ = text_layout.paint_foreground(window, cx);
@@ -1034,8 +1086,9 @@ impl Element for Inline {
 
         if is_selectable {
             if let Some(text_view_state) = GlobalState::global(cx).text_view_state() {
+                let copy_layout = PaintedSelectionLayout::new(&text_layout);
                 let text_bounds = Self::text_line_bounds(
-                    &text_layout,
+                    &copy_layout,
                     text_layout.line_height(),
                     window.content_mask().bounds,
                 );
@@ -1045,6 +1098,20 @@ impl Element for Inline {
                     self.text.clone(),
                     text_layout.clone(),
                     hitbox.bounds,
+                ));
+                let (source, range) = self
+                    .selection_source
+                    .as_ref()
+                    .map(|(source, range)| (source, range.clone()))
+                    .unwrap_or((&self.state, 0..self.text.len()));
+                adapter.register_copy_projection(super::selection_adapter::CopyProjection::Text(
+                    InlineSelectionProjection {
+                        source: Arc::downgrade(source),
+                        range,
+                        text: self.text.clone(),
+                        layout: copy_layout,
+                        selection_bounds: self.selection_bounds,
+                    },
                 ));
             }
 
@@ -1345,6 +1412,98 @@ fn selection_for_multi_click(
     }
 }
 
+trait SelectionGeometry {
+    fn len(&self) -> usize;
+    fn line_height(&self) -> Pixels;
+    fn rows_extent(&self) -> (Pixels, Pixels);
+    fn position_for_index(&self, index: usize) -> Option<Point<Pixels>>;
+}
+
+impl SelectionGeometry for TextLayout {
+    fn len(&self) -> usize {
+        TextLayout::len(self)
+    }
+    fn line_height(&self) -> Pixels {
+        TextLayout::line_height(self)
+    }
+    fn rows_extent(&self) -> (Pixels, Pixels) {
+        text_rows_extent(self, self.line_height())
+    }
+    fn position_for_index(&self, index: usize) -> Option<Point<Pixels>> {
+        TextLayout::position_for_index(self, index)
+    }
+}
+
+impl SelectionGeometry for PaintedSelectionLayout {
+    fn len(&self) -> usize {
+        self.len
+    }
+    fn line_height(&self) -> Pixels {
+        self.line_height
+    }
+    fn rows_extent(&self) -> (Pixels, Pixels) {
+        self.rows_extent()
+    }
+    fn position_for_index(&self, index: usize) -> Option<Point<Pixels>> {
+        self.position_for_index(index)
+    }
+}
+
+/// Shared by paint and Copy: project the current gesture onto the same shaped
+/// UTF-8 text, including rendered inline-code spacing.
+fn project_selection(
+    text: &str,
+    text_layout: &impl SelectionGeometry,
+    selection_bounds: Option<Bounds<Pixels>>,
+    selection_start: Point<Pixels>,
+    selection_end: Point<Pixels>,
+) -> Option<Selection> {
+    if text.is_empty() {
+        return None;
+    }
+    let line_height = text_layout.line_height();
+    let (rows_top, rows_bottom) = match selection_bounds {
+        Some(bounds) => (bounds.top(), bounds.bottom()),
+        None => text_layout.rows_extent(),
+    };
+    let band_top = selection_start.y.min(selection_end.y);
+    let band_bottom = selection_start.y.max(selection_end.y);
+    if rows_bottom <= band_top || rows_top > band_bottom {
+        return None;
+    }
+    if band_top < rows_top && band_bottom >= rows_bottom && text_layout.len() >= text.len() {
+        return Some((0..text.len()).into());
+    }
+
+    let mut selection: Option<Selection> = None;
+    for (offset, c) in text.char_indices() {
+        let Some(pos) = text_layout.position_for_index(offset) else {
+            continue;
+        };
+        let next_offset = offset + c.len_utf8();
+        let mut char_width = line_height.half();
+        if let Some(next_pos) = text_layout.position_for_index(next_offset)
+            && next_pos.y == pos.y
+        {
+            char_width = next_pos.x - pos.x;
+        }
+        let selection_pos = selection_bounds.map_or(pos, |bounds| point(pos.x, bounds.top()));
+        let selection_height = selection_bounds.map_or(line_height, |bounds| bounds.size.height);
+        if point_in_text_selection(
+            selection_pos,
+            char_width,
+            selection_start,
+            selection_end,
+            selection_height,
+        ) {
+            selection
+                .get_or_insert_with(|| Selection::new(offset, offset))
+                .end = next_offset;
+        }
+    }
+    selection
+}
+
 /// Check if a `pos` is within a `bounds`, considering multi-line selections.
 pub(super) fn point_in_text_selection(
     pos: Point<Pixels>,
@@ -1483,7 +1642,8 @@ mod line_bounds_tests {
             element.prepaint_at(origin, window, cx);
 
             let line_height = layout.line_height();
-            let actual = Inline::text_line_bounds(&layout, line_height, mask);
+            let actual =
+                Inline::text_line_bounds(&PaintedSelectionLayout::new(&layout), line_height, mask);
             assert_eq!(actual.len(), 2);
             assert_eq!(
                 actual[0],
@@ -1498,7 +1658,11 @@ mod line_bounds_tests {
             );
 
             let clipped = Bounds::new(point(px(20.), px(0.)), size(px(20.), px(100.)));
-            let actual = Inline::text_line_bounds(&layout, line_height, clipped);
+            let actual = Inline::text_line_bounds(
+                &PaintedSelectionLayout::new(&layout),
+                line_height,
+                clipped,
+            );
             assert_eq!(actual.len(), 2);
             assert_eq!(
                 actual[0],
@@ -1539,7 +1703,11 @@ mod line_bounds_tests {
                     cx,
                 );
                 element.prepaint_at(origin, window, cx);
-                let actual = Inline::text_line_bounds(&layout, layout.line_height(), mask);
+                let actual = Inline::text_line_bounds(
+                    &PaintedSelectionLayout::new(&layout),
+                    layout.line_height(),
+                    mask,
+                );
                 if text.is_empty() {
                     assert!(actual.is_empty());
                 } else {
@@ -1558,6 +1726,136 @@ mod line_bounds_tests {
                             size(px(24.), layout.line_height())
                         )
                     );
+                }
+            }
+        });
+    }
+    /// The character walk this replaced, kept as the oracle: one box per
+    /// character from `position_for_index`, unioned per row.
+    fn by_character(
+        text: &str,
+        text_layout: &TextLayout,
+        line_height: Pixels,
+        mask_bounds: Bounds<Pixels>,
+    ) -> Vec<Bounds<Pixels>> {
+        let mut line_bounds = Vec::new();
+        let mut current_line_y = None;
+        let mut current_bounds: Option<Bounds<Pixels>> = None;
+        let mut offset = 0;
+        for c in text.chars() {
+            let next_offset = offset + c.len_utf8();
+            let Some(pos) = text_layout.position_for_index(offset) else {
+                offset = next_offset;
+                continue;
+            };
+            let mut char_width = line_height.half();
+            if let Some(next_pos) = text_layout.position_for_index(next_offset)
+                && next_pos.y == pos.y
+            {
+                char_width = next_pos.x - pos.x;
+            }
+            let bounds = Bounds::from_corners(pos, point(pos.x + char_width, pos.y + line_height))
+                .intersect(&mask_bounds);
+            if bounds.size.width > px(0.) && bounds.size.height > px(0.) {
+                if current_line_y == Some(pos.y) {
+                    if let Some(current) = current_bounds.as_mut() {
+                        *current = current.union(&bounds);
+                    }
+                } else {
+                    if let Some(current) = current_bounds.take() {
+                        line_bounds.push(current);
+                    }
+                    current_line_y = Some(pos.y);
+                    current_bounds = Some(bounds);
+                }
+            }
+            offset = next_offset;
+        }
+        if let Some(current) = current_bounds {
+            line_bounds.push(current);
+        }
+        line_bounds
+    }
+
+    #[test]
+    fn row_walk_matches_the_character_walk() {
+        let mut app = TestApp::with_text_system(Arc::new(WideMonoTextSystem));
+        in_prepaint(&mut app, |window, cx| {
+            let style = TextStyle {
+                font_family: BODY.into(),
+                font_size: px(16.).into(),
+                ..Default::default()
+            };
+            let origin = point(px(7.), px(11.));
+            let mask = Bounds::new(point(px(0.), px(0.)), size(px(1000.), px(1000.)));
+            let clipped = Bounds::new(point(px(20.), px(30.)), size(px(50.), px(60.)));
+            for text in [
+                "",
+                "one row",
+                "a long paragraph that wraps onto several rows of eight pixel glyphs",
+                "first line\nsecond line that also wraps around\n\nfourth",
+                "中文与 English 混排的一段文字也会换行",
+                "trailing newline\n",
+            ] {
+                for wrap_width in [40., 100., 1000.] {
+                    let runs = text_runs(text.len(), &style, &[]);
+                    let styled =
+                        StyledText::new(SharedString::from(text.to_string())).with_runs(runs);
+                    let layout = styled.layout().clone();
+                    let mut element = styled.into_any_element();
+                    element.layout_as_root(
+                        size(
+                            AvailableSpace::Definite(px(wrap_width)),
+                            AvailableSpace::MinContent,
+                        ),
+                        window,
+                        cx,
+                    );
+                    element.prepaint_at(origin, window, cx);
+                    let line_height = layout.line_height();
+                    let painted_layout = PaintedSelectionLayout::new(&layout);
+                    for mask in [mask, clipped] {
+                        let expected = by_character(text, &layout, line_height, mask);
+                        let actual = Inline::text_line_bounds(&painted_layout, line_height, mask);
+                        let context = format!("{text:?} at {wrap_width}px in {mask:?}");
+                        // The character walk placed a wrapped row's first
+                        // character at the end of the row before it: that row's
+                        // box started one glyph in, and a row holding only that
+                        // one glyph had no box at all. The row walk covers every
+                        // row from its start, so it may see more rows, never
+                        // fewer, and agrees on every row the walk could see.
+                        assert!(
+                            actual.len() >= expected.len(),
+                            "rows of {context}: {} < {}",
+                            actual.len(),
+                            expected.len()
+                        );
+                        for (row, expected) in expected.iter().enumerate() {
+                            let actual = actual
+                                .iter()
+                                .find(|actual| actual.top() == expected.top())
+                                .unwrap_or_else(|| panic!("row {row} of {context} is missing"));
+                            assert_eq!(
+                                actual.bottom(),
+                                expected.bottom(),
+                                "row {row} of {context}"
+                            );
+                            assert_eq!(actual.right(), expected.right(), "row {row} of {context}");
+                            assert!(
+                                actual.left() <= expected.left(),
+                                "row {row} of {context} starts at {:?}, after {:?}",
+                                actual.left(),
+                                expected.left()
+                            );
+                        }
+                        for actual in &actual {
+                            assert_eq!(
+                                actual.left(),
+                                origin.x.max(mask.left()),
+                                "left of {context}"
+                            );
+                        }
+                    }
                 }
             }
         });
@@ -1596,7 +1894,11 @@ mod line_bounds_tests {
             );
 
             let mask = Bounds::new(point(px(0.), px(0.)), size(px(1000.), px(1000.)));
-            let actual = Inline::text_line_bounds(&layout, layout.line_height(), mask);
+            let actual = Inline::text_line_bounds(
+                &PaintedSelectionLayout::new(&layout),
+                layout.line_height(),
+                mask,
+            );
             assert_eq!(actual.len(), 1);
             assert_eq!(
                 actual[0],
@@ -1607,7 +1909,11 @@ mod line_bounds_tests {
                 point(origin.x + physical_width / 2., origin.y),
                 size(physical_width / 4., layout.line_height()),
             );
-            let clipped = Inline::text_line_bounds(&layout, layout.line_height(), clip);
+            let clipped = Inline::text_line_bounds(
+                &PaintedSelectionLayout::new(&layout),
+                layout.line_height(),
+                clip,
+            );
             assert_eq!(clipped.len(), 1);
             assert_eq!(clipped[0].origin, clip.origin);
             assert_eq!(clipped[0].size.height, clip.size.height);

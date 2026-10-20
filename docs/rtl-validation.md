@@ -175,3 +175,38 @@ assertions. Its one ignored large benchmark is upstream's existing default.
 Native Windows, Linux GUI, OS IME, physical touch, and manual assistive-technology
 review are outside this local macOS validation; the PR retains platform CI and
 Holool's RTL CI steps.
+
+
+## October 20, 2026 upstream sync
+
+Merge longbridge/gpui-kit through `1676826d9d49b90f4d7b6808b69924f58796f6f1`
+(Kit 0.8.0), preserving Holool's Arabic editing, native bidi geometry,
+selection, controls, table stripe filler, RTL progress and mobile integration.
+Every runtime alias and compatibility package uses Holool Fast
+`4152f0914665ffe06be31820e3f48ca4be39227c`; exact compatibility/macros remain
+0.3.9 and Fast remains in Kit's default features.
+
+The native adapters are coordinated at iOS
+`bbf4cbb394c18d79cb1bc9c3a84712d04a5d5c91` and Android
+`e494c5c2743106ce01cc1b201de24614230dfecf`. Their examples use the same Fast
+revision. The engine preserves the Android GLES and exclusive-surface fixes
+while importing upstream's wgpu 30 renderer migration.
+
+CE's empty-directional-source crash is addressed at the equivalent Fast
+boundary: its existing source-empty guard runs before inserting a direction
+marker. Native CoreText and isolated-font Cosmic regressions exercise empty
+source with no font runs, zero-length runs, both directions, cached calls and
+wrapping. The Kit regression mounts empty Input/Textarea fields, changes
+inherited direction, adds/removes Arabic text and placeholders, and draws
+multiple retained frames while checking source lengths and caret offsets.
+No CE/Parley backend or legacy gpui-arabic dependency is introduced.
+
+Resolve upstream's immutable copy-selection geometry with Holool's physical
+RTL row extents. Preserve our exact-duration motion helper (upstream now has
+the equivalent precision fix). Import the new tooltip trigger-removal behavior
+and its retained-frame-compatible tests. Upstream's WebView feature now follows
+Kit's backend explicitly; enable both Fast features together for composition.
+
+Target-device rendering, real mobile keyboards, native Windows/Linux UI and
+assistive-technology acceptance remain distinct from automated compile and
+headless checks. Current validation results are recorded in the sync PR.
