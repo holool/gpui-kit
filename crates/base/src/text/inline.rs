@@ -327,15 +327,18 @@ impl InlineState {
 /// shares mutable measurement state; these immutable shaped lines do not.
 struct PaintedSelectionLayout {
     lines: smallvec::SmallVec<[Arc<gpui::WrappedLineLayout>; 1]>,
+    source_ranges: smallvec::SmallVec<[Range<usize>; 1]>,
     bounds: Bounds<Pixels>,
     line_height: Pixels,
     len: usize,
 }
 
 impl PaintedSelectionLayout {
-    fn new(layout: &TextLayout) -> Self {
+    fn new(layout: &TextLayout, text: &str) -> Self {
+        let lines = layout.line_layouts();
         Self {
-            lines: layout.line_layouts(),
+            source_ranges: super::line_snapshot::line_ranges(text, &lines),
+            lines,
             bounds: layout.bounds(),
             line_height: layout.line_height(),
             len: layout.len(),
@@ -343,20 +346,13 @@ impl PaintedSelectionLayout {
     }
 
     fn position_for_index(&self, index: usize) -> Option<Point<Pixels>> {
-        let mut origin = self.bounds.origin;
-        let mut start = 0;
-        for line in &self.lines {
-            let end = start + line.len();
-            if index < start {
-                break;
-            }
-            if index <= end {
-                return Some(origin + line.position_for_index(index - start, self.line_height)?);
-            }
-            origin.y += line.size(self.line_height).height;
-            start = end + 1;
-        }
-        None
+        super::line_snapshot::position_for_index(
+            &self.lines,
+            &self.source_ranges,
+            self.bounds.origin,
+            self.line_height,
+            index,
+        )
     }
 
     fn rows_extent(&self) -> (Pixels, Pixels) {
@@ -1086,7 +1082,7 @@ impl Element for Inline {
 
         if is_selectable {
             if let Some(text_view_state) = GlobalState::global(cx).text_view_state() {
-                let copy_layout = PaintedSelectionLayout::new(&text_layout);
+                let copy_layout = PaintedSelectionLayout::new(&text_layout, &self.text);
                 let text_bounds = Self::text_line_bounds(
                     &copy_layout,
                     text_layout.line_height(),
@@ -1642,8 +1638,11 @@ mod line_bounds_tests {
             element.prepaint_at(origin, window, cx);
 
             let line_height = layout.line_height();
-            let actual =
-                Inline::text_line_bounds(&PaintedSelectionLayout::new(&layout), line_height, mask);
+            let actual = Inline::text_line_bounds(
+                &PaintedSelectionLayout::new(&layout, text),
+                line_height,
+                mask,
+            );
             assert_eq!(actual.len(), 2);
             assert_eq!(
                 actual[0],
@@ -1659,7 +1658,7 @@ mod line_bounds_tests {
 
             let clipped = Bounds::new(point(px(20.), px(0.)), size(px(20.), px(100.)));
             let actual = Inline::text_line_bounds(
-                &PaintedSelectionLayout::new(&layout),
+                &PaintedSelectionLayout::new(&layout, text),
                 line_height,
                 clipped,
             );
@@ -1704,7 +1703,7 @@ mod line_bounds_tests {
                 );
                 element.prepaint_at(origin, window, cx);
                 let actual = Inline::text_line_bounds(
-                    &PaintedSelectionLayout::new(&layout),
+                    &PaintedSelectionLayout::new(&layout, text),
                     layout.line_height(),
                     mask,
                 );
@@ -1813,7 +1812,7 @@ mod line_bounds_tests {
                     );
                     element.prepaint_at(origin, window, cx);
                     let line_height = layout.line_height();
-                    let painted_layout = PaintedSelectionLayout::new(&layout);
+                    let painted_layout = PaintedSelectionLayout::new(&layout, text);
                     for mask in [mask, clipped] {
                         let expected = by_character(text, &layout, line_height, mask);
                         let actual = Inline::text_line_bounds(&painted_layout, line_height, mask);
@@ -1862,6 +1861,54 @@ mod line_bounds_tests {
     }
     #[cfg(target_os = "macos")]
     #[test]
+    fn native_rtl_copy_snapshot_preserves_hard_and_soft_wrap_source_offsets() {
+        let mut app = gpui::TestApp::with_text_system(gpui_fast_macos::text_system_for_tests());
+        crate::text::inline::test_draw::in_prepaint(&mut app, |window, cx| {
+            for text in [
+                "محمد علي محمد علي محمد علي",
+                "محمد علي محمد علي\nمحمد علي",
+                "",
+            ] {
+                let style = gpui::TextStyle {
+                    font_size: px(20.).into(),
+                    ..Default::default()
+                };
+                let styled = gpui::StyledText::new(text).with_runs(crate::text::inline::text_runs(
+                    text.len(),
+                    &style,
+                    &[],
+                ));
+                let layout = styled.layout().clone();
+                let mut element = styled.into_any_element();
+                element.layout_as_root(
+                    gpui::size(
+                        gpui::AvailableSpace::Definite(px(55.)),
+                        gpui::AvailableSpace::MinContent,
+                    ),
+                    window,
+                    cx,
+                );
+                element.prepaint_at(point(px(7.), px(11.)), window, cx);
+                let snapshot = PaintedSelectionLayout::new(&layout, text);
+                if text.len() > 10 {
+                    assert!(
+                        snapshot.lines.len() > text.split('\n').count(),
+                        "native text must soft-wrap"
+                    );
+                }
+                for index in text.char_indices().map(|(i, _)| i).chain([text.len()]) {
+                    assert_eq!(
+                        snapshot.position_for_index(index),
+                        layout.position_for_index(index),
+                        "copy geometry for {text:?} at byte {index}"
+                    );
+                }
+            }
+        });
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
     fn selectable_rtl_row_bounds_cover_physical_glyph_extent_and_clip() {
         let mut app = TestApp::with_text_system(gpui_fast_macos::text_system_for_tests());
         in_prepaint(&mut app, |window, cx| {
@@ -1895,7 +1942,7 @@ mod line_bounds_tests {
 
             let mask = Bounds::new(point(px(0.), px(0.)), size(px(1000.), px(1000.)));
             let actual = Inline::text_line_bounds(
-                &PaintedSelectionLayout::new(&layout),
+                &PaintedSelectionLayout::new(&layout, text),
                 layout.line_height(),
                 mask,
             );
@@ -1910,7 +1957,7 @@ mod line_bounds_tests {
                 size(physical_width / 4., layout.line_height()),
             );
             let clipped = Inline::text_line_bounds(
-                &PaintedSelectionLayout::new(&layout),
+                &PaintedSelectionLayout::new(&layout, text),
                 layout.line_height(),
                 clip,
             );

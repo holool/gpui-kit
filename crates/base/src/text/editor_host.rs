@@ -330,16 +330,20 @@ struct LayoutSnapshot {
     line_height: Pixels,
     text: SharedString,
     lines: Vec<Arc<WrappedLineLayout>>,
+    source_ranges: smallvec::SmallVec<[Range<usize>; 1]>,
 }
 
 impl LayoutSnapshot {
     fn new(layout: &TextLayout) -> Self {
+        let text: SharedString = layout.text().into();
+        let lines: Vec<_> = layout.line_layouts().into_iter().collect();
         Self {
             bounds: layout.bounds(),
             len: layout.len(),
             line_height: layout.line_height(),
-            text: layout.text().into(),
-            lines: layout.line_layouts().into_iter().collect(),
+            source_ranges: super::line_snapshot::line_ranges(&text, &lines),
+            text,
+            lines,
         }
     }
 
@@ -360,18 +364,13 @@ impl LayoutSnapshot {
     }
 
     fn position_for_index(&self, index: usize) -> Option<Point<Pixels>> {
-        let mut origin = self.bounds.origin;
-        let mut start = 0;
-        for line in &self.lines {
-            if index <= start + line.len() {
-                return line
-                    .position_for_index(index - start, self.line_height)
-                    .map(|p| origin + p);
-            }
-            start += line.len() + 1;
-            origin.y += line.size(self.line_height).height;
-        }
-        None
+        super::line_snapshot::position_for_index(
+            &self.lines,
+            &self.source_ranges,
+            self.bounds.origin,
+            self.line_height,
+            index,
+        )
     }
 }
 
@@ -611,9 +610,9 @@ fn whole_index_at(layout: &LayoutSnapshot, at: Point<Pixels>) -> usize {
     let bounds = layout.bounds();
     let line_height = layout.line_height();
     let mut top = bounds.top();
-    let mut start = 0;
     let lines = layout.line_layouts();
     for (ix, line) in lines.iter().enumerate() {
+        let start = layout.source_ranges[ix].start;
         let height = line.size(line_height).height.max(line_height);
         let is_last = ix + 1 == lines.len();
         if at.y < top + height || is_last {
@@ -627,7 +626,6 @@ fn whole_index_at(layout: &LayoutSnapshot, at: Point<Pixels>) -> usize {
             return start + index;
         }
         top += height;
-        start += line.len() + 1;
     }
     0
 }
@@ -860,6 +858,71 @@ mod tests {
         // Cells of one row share a line; the second column sits to the right.
         assert_eq!(top(4), top(5));
         assert!(geometries[&5].bounds().left() > geometries[&4].bounds().right() - px(1.));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn native_rtl_editor_snapshot_preserves_hard_and_soft_wrap_source_offsets() {
+        let mut app = gpui::TestApp::with_text_system(gpui_fast_macos::text_system_for_tests());
+        crate::text::inline::test_draw::in_prepaint(&mut app, |window, cx| {
+            for text in [
+                "محمد علي محمد علي محمد علي",
+                "محمد علي محمد علي\nمحمد علي",
+                "",
+            ] {
+                let style = gpui::TextStyle {
+                    font_size: px(20.).into(),
+                    ..Default::default()
+                };
+                let styled = gpui::StyledText::new(text).with_runs(crate::text::inline::text_runs(
+                    text.len(),
+                    &style,
+                    &[],
+                ));
+                let layout = styled.layout().clone();
+                let mut element = styled.into_any_element();
+                element.layout_as_root(
+                    gpui::size(
+                        gpui::AvailableSpace::Definite(px(55.)),
+                        gpui::AvailableSpace::MinContent,
+                    ),
+                    window,
+                    cx,
+                );
+                element.prepaint_at(point(px(7.), px(11.)), window, cx);
+                let snapshot = LayoutSnapshot::new(&layout);
+                assert_eq!(snapshot.text(), text, "snapshots keep logical source text");
+                if text.len() > 10 {
+                    assert!(
+                        snapshot.lines.len() > text.split('\n').count(),
+                        "native text must soft-wrap"
+                    );
+                }
+                for index in text.char_indices().map(|(i, _)| i).chain([text.len()]) {
+                    assert_eq!(
+                        snapshot.position_for_index(index),
+                        layout.position_for_index(index),
+                        "editor geometry for {text:?} at byte {index}"
+                    );
+                }
+                let mut top = snapshot.bounds.top();
+                for (line, range) in snapshot.lines.iter().zip(&snapshot.source_ranges) {
+                    if !range.is_empty() {
+                        let at = point(
+                            snapshot.bounds.left() + line.unwrapped_layout.width + px(10.),
+                            top + px(1.),
+                        );
+                        let index = whole_index_at(&snapshot, at);
+                        assert_eq!(
+                            index, range.start,
+                            "RTL row starts at a logical source byte"
+                        );
+                        assert!(text.is_char_boundary(index));
+                    }
+                    top += line.size(snapshot.line_height).height;
+                }
+            }
+        });
     }
 
     #[gpui::test]

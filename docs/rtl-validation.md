@@ -183,12 +183,12 @@ Merge longbridge/gpui-kit through `1676826d9d49b90f4d7b6808b69924f58796f6f1`
 (Kit 0.8.0), preserving Holool's Arabic editing, native bidi geometry,
 selection, controls, table stripe filler, RTL progress and mobile integration.
 Every runtime alias and compatibility package uses Holool Fast
-`4152f0914665ffe06be31820e3f48ca4be39227c`; exact compatibility/macros remain
+`c4e8f3c1b71741eb13eaa793e11561fc53deda35`; exact compatibility/macros remain
 0.3.9 and Fast remains in Kit's default features.
 
 The native adapters are coordinated at iOS
-`bbf4cbb394c18d79cb1bc9c3a84712d04a5d5c91` and Android
-`e494c5c2743106ce01cc1b201de24614230dfecf`. Their examples use the same Fast
+`9e4db412b3a59a4cfd4a20c4faea6706f58e6483` and Android
+`1d79779ddbcfe40387a29a317c5aca2009f44c25`. Their examples use the same Fast
 revision. The engine preserves the Android GLES and exclusive-surface fixes
 while importing upstream's wgpu 30 renderer migration.
 
@@ -217,3 +217,13 @@ workaround unnecessary. The existing close-button setting transition passes
 with ordinary entity notification, so this sync removes the stored window and
 forced refresh. The rounded-table radius fixture now traverses rounded clip
 child scenes; all original header corner-radius assertions remain intact.
+
+
+Upstream's new immutable selection and editor-host snapshots assumed a newline
+between every shaped line. Fast's independent RTL soft rows invalidate that
+assumption. A private shared source-range mapping now consumes bytes only for
+actual newlines, gives a soft-boundary caret to the next row, and preserves
+native source-byte hit testing. Fast's existing `TextLayout::text()` getter
+also omits synthetic soft-wrap separators. Native CoreText regressions cover
+hard/soft wrapping, empty text, copy snapshots and external-editor snapshots;
+no additional public API is introduced.

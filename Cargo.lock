@@ -860,7 +860,7 @@ dependencies = [
 [[package]]
 name = "bench_metrics"
 version = "0.1.0"
-source = "git+https://github.com/holool/gpui-fast?rev=4152f0914665ffe06be31820e3f48ca4be39227c#4152f0914665ffe06be31820e3f48ca4be39227c"
+source = "git+https://github.com/holool/gpui-fast?rev=c4e8f3c1b71741eb13eaa793e11561fc53deda35#c4e8f3c1b71741eb13eaa793e11561fc53deda35"
 dependencies = [
  "anyhow",
  "criterion",
@@ -1535,7 +1535,7 @@ dependencies = [
 [[package]]
 name = "collections"
 version = "0.1.0"
-source = "git+https://github.com/holool/gpui-fast?rev=4152f0914665ffe06be31820e3f48ca4be39227c#4152f0914665ffe06be31820e3f48ca4be39227c"
+source = "git+https://github.com/holool/gpui-fast?rev=c4e8f3c1b71741eb13eaa793e11561fc53deda35#c4e8f3c1b71741eb13eaa793e11561fc53deda35"
 dependencies = [
  "gpui_util",
  "indexmap",
@@ -2419,7 +2419,7 @@ dependencies = [
 [[package]]
 name = "derive_refineable"
 version = "0.1.0"
-source = "git+https://github.com/holool/gpui-fast?rev=4152f0914665ffe06be31820e3f48ca4be39227c#4152f0914665ffe06be31820e3f48ca4be39227c"
+source = "git+https://github.com/holool/gpui-fast?rev=c4e8f3c1b71741eb13eaa793e11561fc53deda35#c4e8f3c1b71741eb13eaa793e11561fc53deda35"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3819,7 +3819,7 @@ dependencies = [
 [[package]]
 name = "gpui"
 version = "0.2.2"
-source = "git+https://github.com/holool/gpui-fast?rev=4152f0914665ffe06be31820e3f48ca4be39227c#4152f0914665ffe06be31820e3f48ca4be39227c"
+source = "git+https://github.com/holool/gpui-fast?rev=c4e8f3c1b71741eb13eaa793e11561fc53deda35#c4e8f3c1b71741eb13eaa793e11561fc53deda35"
 dependencies = [
  "accesskit",
  "anyhow",
@@ -4146,7 +4146,7 @@ dependencies = [
  "gpui-pre-platform",
  "gpui-pre-web",
  "gpui_android",
- "gpui_ios 0.1.0 (git+https://github.com/holool/gpui_ios?rev=bbf4cbb394c18d79cb1bc9c3a84712d04a5d5c91)",
+ "gpui_ios 0.1.0 (git+https://github.com/holool/gpui_ios?rev=9e4db412b3a59a4cfd4a20c4faea6706f58e6483)",
  "gpui_platform",
  "gpui_web",
  "lsp-types 0.97.0",
@@ -4178,7 +4178,7 @@ dependencies = [
 [[package]]
 name = "gpui-pre"
 version = "0.3.9"
-source = "git+https://github.com/holool/gpui-fast?rev=4152f0914665ffe06be31820e3f48ca4be39227c#4152f0914665ffe06be31820e3f48ca4be39227c"
+source = "git+https://github.com/holool/gpui-fast?rev=c4e8f3c1b71741eb13eaa793e11561fc53deda35#c4e8f3c1b71741eb13eaa793e11561fc53deda35"
 dependencies = [
  "gpui",
 ]
@@ -4199,7 +4199,7 @@ dependencies = [
 [[package]]
 name = "gpui-pre-platform"
 version = "0.3.9"
-source = "git+https://github.com/holool/gpui-fast?rev=4152f0914665ffe06be31820e3f48ca4be39227c#4152f0914665ffe06be31820e3f48ca4be39227c"
+source = "git+https://github.com/holool/gpui-fast?rev=c4e8f3c1b71741eb13eaa793e11561fc53deda35#c4e8f3c1b71741eb13eaa793e11561fc53deda35"
 dependencies = [
  "gpui",
  "gpui_platform",
@@ -4259,7 +4259,7 @@ dependencies = [
 [[package]]
 name = "gpui-pre-reqwest-client"
 version = "0.3.9"
-source = "git+https://github.com/holool/gpui-fast?rev=4152f0914665ffe06be31820e3f48ca4be39227c#4152f0914665ffe06be31820e3f48ca4be39227c"
+source = "git+https://github.com/holool/gpui-fast?rev=c4e8f3c1b71741eb13eaa793e11561fc53deda35#c4e8f3c1b71741eb13eaa793e11561fc53deda35"
 dependencies = [
  "reqwest_client",
 ]
@@ -4267,7 +4267,7 @@ dependencies = [
 [[package]]
 name = "gpui-pre-sum-tree"
 version = "0.3.9"
-source = "git+https://github.com/holool/gpui-fast?rev=4152f0914665ffe06be31820e3f48ca4be39227c#4152f0914665ffe06be31820e3f48ca4be39227c"
+source = "git+https://github.com/holool/gpui-fast?rev=c4e8f3c1b71741eb13eaa793e11561fc53deda35#c4e8f3c1b71741eb13eaa793e11561fc53deda35"
 dependencies = [
  "sum_tree",
 ]
@@ -4275,7 +4275,7 @@ dependencies = [
 [[package]]
 name = "gpui-pre-web"
 version = "0.3.9"
-source = "git+https://github.com/holool/gpui-fast?rev=4152f0914665ffe06be31820e3f48ca4be39227c#4152f0914665ffe06be31820e3f48ca4be39227c"
+source = "git+https://github.com/holool/gpui-fast?rev=c4e8f3c1b71741eb13eaa793e11561fc53deda35#c4e8f3c1b71741eb13eaa793e11561fc53deda35"
 dependencies = [
  "gpui_web",
 ]
@@ -4339,7 +4339,7 @@ dependencies = [
 [[package]]
 name = "gpui_android"
 version = "0.1.0"
-source = "git+https://github.com/holool/gpui_android?rev=e494c5c2743106ce01cc1b201de24614230dfecf#e494c5c2743106ce01cc1b201de24614230dfecf"
+source = "git+https://github.com/holool/gpui_android?rev=1d79779ddbcfe40387a29a317c5aca2009f44c25#1d79779ddbcfe40387a29a317c5aca2009f44c25"
 dependencies = [
  "android_logger",
  "anyhow",
@@ -4358,7 +4358,7 @@ dependencies = [
 [[package]]
 name = "gpui_apple"
 version = "0.1.0"
-source = "git+https://github.com/holool/gpui-fast?rev=4152f0914665ffe06be31820e3f48ca4be39227c#4152f0914665ffe06be31820e3f48ca4be39227c"
+source = "git+https://github.com/holool/gpui-fast?rev=c4e8f3c1b71741eb13eaa793e11561fc53deda35#c4e8f3c1b71741eb13eaa793e11561fc53deda35"
 dependencies = [
  "anyhow",
  "async-task",
@@ -4399,7 +4399,25 @@ dependencies = [
 [[package]]
 name = "gpui_ios"
 version = "0.1.0"
-source = "git+https://github.com/holool/gpui-fast?rev=4152f0914665ffe06be31820e3f48ca4be39227c#4152f0914665ffe06be31820e3f48ca4be39227c"
+source = "git+https://github.com/holool/gpui_ios?rev=9e4db412b3a59a4cfd4a20c4faea6706f58e6483#9e4db412b3a59a4cfd4a20c4faea6706f58e6483"
+dependencies = [
+ "anyhow",
+ "futures",
+ "gpui",
+ "gpui_apple",
+ "log",
+ "objc2-quartz-core 0.3.2",
+ "parking_lot",
+ "raw-window-handle",
+ "serde_json",
+ "unicode-segmentation",
+ "uuid",
+]
+
+[[package]]
+name = "gpui_ios"
+version = "0.1.0"
+source = "git+https://github.com/holool/gpui-fast?rev=c4e8f3c1b71741eb13eaa793e11561fc53deda35#c4e8f3c1b71741eb13eaa793e11561fc53deda35"
 dependencies = [
  "anyhow",
  "block2 0.6.2",
@@ -4418,27 +4436,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "gpui_ios"
-version = "0.1.0"
-source = "git+https://github.com/holool/gpui_ios?rev=bbf4cbb394c18d79cb1bc9c3a84712d04a5d5c91#bbf4cbb394c18d79cb1bc9c3a84712d04a5d5c91"
-dependencies = [
- "anyhow",
- "futures",
- "gpui",
- "gpui_apple",
- "log",
- "objc2-quartz-core 0.3.2",
- "parking_lot",
- "raw-window-handle",
- "serde_json",
- "unicode-segmentation",
- "uuid",
-]
-
-[[package]]
 name = "gpui_linux"
 version = "0.1.0"
-source = "git+https://github.com/holool/gpui-fast?rev=4152f0914665ffe06be31820e3f48ca4be39227c#4152f0914665ffe06be31820e3f48ca4be39227c"
+source = "git+https://github.com/holool/gpui-fast?rev=c4e8f3c1b71741eb13eaa793e11561fc53deda35#c4e8f3c1b71741eb13eaa793e11561fc53deda35"
 dependencies = [
  "accesskit",
  "accesskit_unix",
@@ -4482,7 +4482,7 @@ dependencies = [
 [[package]]
 name = "gpui_macos"
 version = "0.1.0"
-source = "git+https://github.com/holool/gpui-fast?rev=4152f0914665ffe06be31820e3f48ca4be39227c#4152f0914665ffe06be31820e3f48ca4be39227c"
+source = "git+https://github.com/holool/gpui-fast?rev=c4e8f3c1b71741eb13eaa793e11561fc53deda35#c4e8f3c1b71741eb13eaa793e11561fc53deda35"
 dependencies = [
  "accesskit",
  "accesskit_macos",
@@ -4521,7 +4521,7 @@ dependencies = [
 [[package]]
 name = "gpui_macros"
 version = "0.1.0"
-source = "git+https://github.com/holool/gpui-fast?rev=4152f0914665ffe06be31820e3f48ca4be39227c#4152f0914665ffe06be31820e3f48ca4be39227c"
+source = "git+https://github.com/holool/gpui-fast?rev=c4e8f3c1b71741eb13eaa793e11561fc53deda35#c4e8f3c1b71741eb13eaa793e11561fc53deda35"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -4532,12 +4532,12 @@ dependencies = [
 [[package]]
 name = "gpui_platform"
 version = "0.1.0"
-source = "git+https://github.com/holool/gpui-fast?rev=4152f0914665ffe06be31820e3f48ca4be39227c#4152f0914665ffe06be31820e3f48ca4be39227c"
+source = "git+https://github.com/holool/gpui-fast?rev=c4e8f3c1b71741eb13eaa793e11561fc53deda35#c4e8f3c1b71741eb13eaa793e11561fc53deda35"
 dependencies = [
  "anyhow",
  "console_error_panic_hook",
  "gpui",
- "gpui_ios 0.1.0 (git+https://github.com/holool/gpui-fast?rev=4152f0914665ffe06be31820e3f48ca4be39227c)",
+ "gpui_ios 0.1.0 (git+https://github.com/holool/gpui-fast?rev=c4e8f3c1b71741eb13eaa793e11561fc53deda35)",
  "gpui_linux",
  "gpui_macos",
  "gpui_web",
@@ -4548,7 +4548,7 @@ dependencies = [
 [[package]]
 name = "gpui_shared_string"
 version = "0.1.0"
-source = "git+https://github.com/holool/gpui-fast?rev=4152f0914665ffe06be31820e3f48ca4be39227c#4152f0914665ffe06be31820e3f48ca4be39227c"
+source = "git+https://github.com/holool/gpui-fast?rev=c4e8f3c1b71741eb13eaa793e11561fc53deda35#c4e8f3c1b71741eb13eaa793e11561fc53deda35"
 dependencies = [
  "schemars",
  "serde",
@@ -4558,7 +4558,7 @@ dependencies = [
 [[package]]
 name = "gpui_util"
 version = "0.1.0"
-source = "git+https://github.com/holool/gpui-fast?rev=4152f0914665ffe06be31820e3f48ca4be39227c#4152f0914665ffe06be31820e3f48ca4be39227c"
+source = "git+https://github.com/holool/gpui-fast?rev=c4e8f3c1b71741eb13eaa793e11561fc53deda35#c4e8f3c1b71741eb13eaa793e11561fc53deda35"
 dependencies = [
  "anyhow",
  "log",
@@ -4568,7 +4568,7 @@ dependencies = [
 [[package]]
 name = "gpui_web"
 version = "0.1.0"
-source = "git+https://github.com/holool/gpui-fast?rev=4152f0914665ffe06be31820e3f48ca4be39227c#4152f0914665ffe06be31820e3f48ca4be39227c"
+source = "git+https://github.com/holool/gpui-fast?rev=c4e8f3c1b71741eb13eaa793e11561fc53deda35#c4e8f3c1b71741eb13eaa793e11561fc53deda35"
 dependencies = [
  "anyhow",
  "async-channel",
@@ -4597,7 +4597,7 @@ dependencies = [
 [[package]]
 name = "gpui_wgpu"
 version = "0.1.0"
-source = "git+https://github.com/holool/gpui-fast?rev=4152f0914665ffe06be31820e3f48ca4be39227c#4152f0914665ffe06be31820e3f48ca4be39227c"
+source = "git+https://github.com/holool/gpui-fast?rev=c4e8f3c1b71741eb13eaa793e11561fc53deda35#c4e8f3c1b71741eb13eaa793e11561fc53deda35"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -4624,7 +4624,7 @@ dependencies = [
 [[package]]
 name = "gpui_windows"
 version = "0.1.0"
-source = "git+https://github.com/holool/gpui-fast?rev=4152f0914665ffe06be31820e3f48ca4be39227c#4152f0914665ffe06be31820e3f48ca4be39227c"
+source = "git+https://github.com/holool/gpui-fast?rev=c4e8f3c1b71741eb13eaa793e11561fc53deda35#c4e8f3c1b71741eb13eaa793e11561fc53deda35"
 dependencies = [
  "accesskit",
  "accesskit_windows",
@@ -4982,7 +4982,7 @@ dependencies = [
 [[package]]
 name = "http_client"
 version = "0.1.0"
-source = "git+https://github.com/holool/gpui-fast?rev=4152f0914665ffe06be31820e3f48ca4be39227c#4152f0914665ffe06be31820e3f48ca4be39227c"
+source = "git+https://github.com/holool/gpui-fast?rev=c4e8f3c1b71741eb13eaa793e11561fc53deda35#c4e8f3c1b71741eb13eaa793e11561fc53deda35"
 dependencies = [
  "anyhow",
  "bytes",
@@ -5000,7 +5000,7 @@ dependencies = [
 [[package]]
 name = "http_client_tls"
 version = "0.1.0"
-source = "git+https://github.com/holool/gpui-fast?rev=4152f0914665ffe06be31820e3f48ca4be39227c#4152f0914665ffe06be31820e3f48ca4be39227c"
+source = "git+https://github.com/holool/gpui-fast?rev=c4e8f3c1b71741eb13eaa793e11561fc53deda35#c4e8f3c1b71741eb13eaa793e11561fc53deda35"
 dependencies = [
  "log",
  "rustls",
@@ -8786,7 +8786,7 @@ dependencies = [
 [[package]]
 name = "refineable"
 version = "0.1.0"
-source = "git+https://github.com/holool/gpui-fast?rev=4152f0914665ffe06be31820e3f48ca4be39227c#4152f0914665ffe06be31820e3f48ca4be39227c"
+source = "git+https://github.com/holool/gpui-fast?rev=c4e8f3c1b71741eb13eaa793e11561fc53deda35#c4e8f3c1b71741eb13eaa793e11561fc53deda35"
 dependencies = [
  "derive_refineable",
 ]
@@ -8853,7 +8853,7 @@ checksum = "19b30a45b0cd0bcca8037f3d0dc3421eaf95327a17cad11964fb8179b4fc4832"
 [[package]]
 name = "reqwest_client"
 version = "0.1.0"
-source = "git+https://github.com/holool/gpui-fast?rev=4152f0914665ffe06be31820e3f48ca4be39227c#4152f0914665ffe06be31820e3f48ca4be39227c"
+source = "git+https://github.com/holool/gpui-fast?rev=c4e8f3c1b71741eb13eaa793e11561fc53deda35#c4e8f3c1b71741eb13eaa793e11561fc53deda35"
 dependencies = [
  "anyhow",
  "bytes",
@@ -9284,7 +9284,7 @@ dependencies = [
 [[package]]
 name = "scheduler"
 version = "0.1.0"
-source = "git+https://github.com/holool/gpui-fast?rev=4152f0914665ffe06be31820e3f48ca4be39227c#4152f0914665ffe06be31820e3f48ca4be39227c"
+source = "git+https://github.com/holool/gpui-fast?rev=c4e8f3c1b71741eb13eaa793e11561fc53deda35#c4e8f3c1b71741eb13eaa793e11561fc53deda35"
 dependencies = [
  "async-task",
  "backtrace",
@@ -10021,7 +10021,7 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 [[package]]
 name = "sum_tree"
 version = "0.1.0"
-source = "git+https://github.com/holool/gpui-fast?rev=4152f0914665ffe06be31820e3f48ca4be39227c#4152f0914665ffe06be31820e3f48ca4be39227c"
+source = "git+https://github.com/holool/gpui-fast?rev=c4e8f3c1b71741eb13eaa793e11561fc53deda35#c4e8f3c1b71741eb13eaa793e11561fc53deda35"
 dependencies = [
  "heapless",
  "rayon",
@@ -13373,7 +13373,7 @@ dependencies = [
 [[package]]
 name = "ztracing"
 version = "0.1.0"
-source = "git+https://github.com/holool/gpui-fast?rev=4152f0914665ffe06be31820e3f48ca4be39227c#4152f0914665ffe06be31820e3f48ca4be39227c"
+source = "git+https://github.com/holool/gpui-fast?rev=c4e8f3c1b71741eb13eaa793e11561fc53deda35#c4e8f3c1b71741eb13eaa793e11561fc53deda35"
 dependencies = [
  "tracing",
  "ztracing_macro",
@@ -13382,7 +13382,7 @@ dependencies = [
 [[package]]
 name = "ztracing_macro"
 version = "0.1.0"
-source = "git+https://github.com/holool/gpui-fast?rev=4152f0914665ffe06be31820e3f48ca4be39227c#4152f0914665ffe06be31820e3f48ca4be39227c"
+source = "git+https://github.com/holool/gpui-fast?rev=c4e8f3c1b71741eb13eaa793e11561fc53deda35#c4e8f3c1b71741eb13eaa793e11561fc53deda35"
 
 [[package]]
 name = "zune-core"
