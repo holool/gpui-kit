@@ -227,3 +227,45 @@ native source-byte hit testing. Fast's existing `TextLayout::text()` getter
 also omits synthetic soft-wrap separators. Native CoreText regressions cover
 hard/soft wrapping, empty text, copy snapshots and external-editor snapshots;
 no additional public API is introduced.
+
+
+## October 27, 2026 release sync
+
+Merge upstream Kit v0.8.1 (`99576db58ec8103417c41a092e891b4022d24e7e`). All
+runtime and compatibility dependencies share Holool Fast `c1d2067` (upstream
+v0.1.12), with exact support/macros 0.3.10. Fast remains enabled by default.
+The iOS and Android adapters move with it and implement the new runtime platform
+identity API. Existing RTL controls, logical edges, source-byte snapshots, Arabic
+selection/editing and Android GLES handling are preserved.
+
+Combine upstream editor tab stops with directional shaping. Bidi tab expansion
+moves visual glyph segments together with native grapheme caret/selection geometry,
+keeps the shaping cache immutable and measures the same width when wrapping.
+Native CoreText tests cover Arabic and mixed text in both directions and right-origin
+tab stops. The upstream unit tests continue to cover fractional and zero-width tabs.
+
+The new once-per-frame selection publication no longer dirties the entire window
+selection entity. Notify changed participants so retained plain text updates its
+selection. Keep the TextView's ambient selection context inside its retained view
+boundary: Fast can redraw that view without painting its outer TextView element.
+This fixes existing word/line and long-press/handle interaction regressions without
+forcing unrelated views to redraw. The old global selection-order reset workaround
+is superseded by upstream's window-owned paint-order bookkeeping and its retained
+view regression tests.
+
+The imported GPUI snapshot changes keyboard/modifier parsing and scroll event APIs;
+see upstream v0.8.1 release notes. Rust 1.99.0 is used for validation. Target-device
+keyboard, physical touch and assistive-technology acceptance are separate from the
+automated native compilation and headless interaction checks recorded in the PR.
+
+
+Custom plain-selection fixtures now call the existing public
+`TextSelectionRegistration::with_rendered_element` hook, as Base SelectableText
+already does. This ties their lifetime to retained element state rather than
+incorrectly treating a skipped cached frame as removal. All original cross-renderer
+and virtualized copy assertions remain unchanged.
+
+Completed local checks at the release integration: Base 1,512 tests plus two host
+tests; Component 735 library and 50 integration tests; Kit 421 integration tests
+plus its UI test; WebView two tests. All pass with Fast enabled. The dependency
+lock contains one GPUI runtime revision, including native adapter dependencies.
