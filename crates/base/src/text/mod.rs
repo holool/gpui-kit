@@ -19,6 +19,7 @@ mod stream_fade;
 mod style;
 mod text_view;
 mod utils;
+mod view_context;
 
 use gpui::{App, ElementId, IntoElement, RenderOnce, SharedString, Window};
 pub use inline_element::*;
@@ -31,6 +32,7 @@ pub use style::*;
 pub use text_view::*;
 
 pub(crate) fn init(cx: &mut App) {
+    inline::init(cx);
     state::init(cx);
 }
 
