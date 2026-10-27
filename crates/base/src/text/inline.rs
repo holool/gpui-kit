@@ -406,15 +406,19 @@ static DROPPED_STATES: AtomicUsize = AtomicUsize::new(0);
 
 struct RetainedLayoutCleanup {
     sender: Sender<()>,
-    _task: Task<()>,
+    task: Option<Task<()>>,
 }
 
 impl Global for RetainedLayoutCleanup {}
 
 impl Drop for RetainedLayoutCleanup {
     fn drop(&mut self) {
-        // Release the local task's channel waker on its owning thread before
-        // cancelling it. Another app's drops must not wake a retired executor.
+        // Cancel the task first, on its owning thread: that drops the receiver
+        // and its listener. Closing a channel the task still listens on wakes
+        // it inside the channel's notify; a retired executor then drops the
+        // task right there, and its listener deadlocks on notify's lock.
+        // Closing after leaves other threads' drops nothing to wake.
+        drop(self.task.take());
         self.sender.close();
     }
 }
@@ -435,7 +439,7 @@ pub(super) fn init(cx: &mut App) {
     });
     cx.set_global(RetainedLayoutCleanup {
         sender,
-        _task: task,
+        task: Some(task),
     });
 }
 
@@ -3265,6 +3269,25 @@ mod retained_layout_tests {
                 .w(px(300.))
                 .children(self.state.as_ref().map(TextView::new))
         }
+    }
+
+    /// Dropping the app closed the cleanup channel while its task still
+    /// listened: the wake reached the retired executor, which dropped the task
+    /// inside the channel's notify, and the task's listener then waited on
+    /// the lock that notify held.
+    #[test]
+    fn dropping_the_app_after_the_cleanup_task_ran_returns() {
+        let (done, finished) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let cx = TestAppContext::single();
+            cx.update(crate::init);
+            cx.run_until_parked();
+            drop(cx);
+            _ = done.send(());
+        });
+        finished
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .expect("dropping the app must not deadlock in the layout cleanup");
     }
 
     #[gpui::test]
