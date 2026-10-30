@@ -258,4 +258,49 @@ mod tests {
         assert!(matches!(nav_icon(Next, true), Some(IconName::ChevronLeft)));
         assert!(nav_icon(Day, true).is_none());
     }
+
+    #[test]
+    fn french_and_arabic_name_every_month_and_weekday() {
+        let months = [
+            "January",
+            "February",
+            "March",
+            "April",
+            "May",
+            "June",
+            "July",
+            "August",
+            "September",
+            "October",
+            "November",
+            "December",
+        ];
+        let keys = months
+            .iter()
+            .map(|month| format!("Calendar.month.{month}"))
+            .chain((0..7).map(|day| format!("Calendar.week.{day}")));
+        for key in keys {
+            let en = rust_i18n::t!(&key, locale = "en");
+            for locale in ["fr", "ar"] {
+                // Saturday is "Sa" in French too.
+                if locale == "fr" && key == "Calendar.week.6" {
+                    continue;
+                }
+                assert_ne!(
+                    rust_i18n::t!(&key, locale = locale),
+                    en,
+                    "{key} in {locale}"
+                );
+            }
+        }
+        assert_eq!(
+            rust_i18n::t!("Calendar.month.January", locale = "ar"),
+            "جانفي"
+        );
+        assert_eq!(
+            rust_i18n::t!("Calendar.month.August", locale = "fr"),
+            "Août"
+        );
+        assert_eq!(rust_i18n::t!("Calendar.week.6", locale = "fr"), "Sa");
+    }
 }
