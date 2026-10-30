@@ -20,6 +20,8 @@ Calendar:
     zh-HK: 日
     zh-TW: 日
     it: Do
+    fr: "Di"
+    ar: "ح"
   week.1:
     en: Mo
     pt-BR: "Se"
@@ -27,6 +29,8 @@ Calendar:
     zh-HK: 一
     zh-TW: 一
     it: Lu
+    fr: "Lu"
+    ar: "ن"
   week.2:
     en: Tu
     pt-BR: "Te"
@@ -34,6 +38,8 @@ Calendar:
     zh-HK: 二
     zh-TW: 二
     it: Ma
+    fr: "Ma"
+    ar: "ث"
   week.3:
     en: We
     pt-BR: "Qa"
@@ -41,6 +47,8 @@ Calendar:
     zh-HK: 三
     zh-TW: 三
     it: Me
+    fr: "Me"
+    ar: "ر"
   week.4:
     en: Th
     pt-BR: "Qi"
@@ -48,6 +56,8 @@ Calendar:
     zh-HK: 四
     zh-TW: 四
     it: Gi
+    fr: "Je"
+    ar: "خ"
   week.5:
     en: Fr
     pt-BR: "Sx"
@@ -55,6 +65,8 @@ Calendar:
     zh-HK: 五
     zh-TW: 五
     it: Ve
+    fr: "Ve"
+    ar: "ج"
   week.6:
     en: Sa
     pt-BR: "Sá"
@@ -62,6 +74,8 @@ Calendar:
     zh-HK: 六
     zh-TW: 六
     it: Sa
+    fr: "Sa"
+    ar: "س"
   month.January:
     en: January
     pt-BR: "Janeiro"
@@ -69,6 +83,8 @@ Calendar:
     zh-HK: 一月
     zh-TW: 一月
     it: Gennaio
+    fr: "Janvier"
+    ar: "جانفي"
   month.February:
     en: February
     pt-BR: "Fevereiro"
@@ -76,6 +92,8 @@ Calendar:
     zh-HK: 二月
     zh-TW: 二月
     it: Febbraio
+    fr: "Février"
+    ar: "فيفري"
   month.March:
     en: March
     pt-BR: "Março"
@@ -83,6 +101,8 @@ Calendar:
     zh-HK: 三月
     zh-TW: 三月
     it: Marzo
+    fr: "Mars"
+    ar: "مارس"
   month.April:
     en: April
     pt-BR: "Abril"
@@ -90,6 +110,8 @@ Calendar:
     zh-HK: 四月
     zh-TW: 四月
     it: Aprile
+    fr: "Avril"
+    ar: "أفريل"
   month.May:
     en: May
     pt-BR: "Maio"
@@ -97,6 +119,8 @@ Calendar:
     zh-HK: 五月
     zh-TW: 五月
     it: Maggio
+    fr: "Mai"
+    ar: "ماي"
   month.June:
     en: June
     pt-BR: "Junho"
@@ -104,6 +128,8 @@ Calendar:
     zh-HK: 六月
     zh-TW: 六月
     it: Giugno
+    fr: "Juin"
+    ar: "جوان"
   month.July:
     en: July
     pt-BR: "Julho"
@@ -111,6 +137,8 @@ Calendar:
     zh-HK: 七月
     zh-TW: 七月
     it: Luglio
+    fr: "Juillet"
+    ar: "جويلية"
   month.August:
     en: August
     pt-BR: "Agosto"
@@ -118,6 +146,8 @@ Calendar:
     zh-HK: 八月
     zh-TW: 八月
     it: Agosto
+    fr: "Août"
+    ar: "أوت"
   month.September:
     en: September
     pt-BR: "Setembro"
@@ -125,6 +155,8 @@ Calendar:
     zh-HK: 九月
     zh-TW: 九月
     it: Settembre
+    fr: "Septembre"
+    ar: "سبتمبر"
   month.October:
     en: October
     pt-BR: "Outubro"
@@ -132,6 +164,8 @@ Calendar:
     zh-HK: 十月
     zh-TW: 十月
     it: Ottobre
+    fr: "Octobre"
+    ar: "أكتوبر"
   month.November:
     en: November
     pt-BR: "Novembro"
@@ -139,6 +173,8 @@ Calendar:
     zh-HK: 十一月
     zh-TW: 十一月
     it: Novembre
+    fr: "Novembre"
+    ar: "نوفمبر"
   month.December:
     en: December
     pt-BR: "Dezembro"
@@ -146,6 +182,8 @@ Calendar:
     zh-HK: 十二月
     zh-TW: 十二月
     it: Dicembre
+    fr: "Décembre"
+    ar: "ديسمبر"
 DatePicker:
   placeholder:
     en: "Select date"
@@ -154,11 +192,15 @@ DatePicker:
     zh-HK: 選擇日期
     zh-TW: 選取日期
     it: "Seleziona data"
+    fr: "Choisir une date"
+    ar: "اختر تاريخًا"
   time:
     en: Time
     pt-BR: "Hora"
     zh-CN: 时间
     zh-HK: 時間
+    fr: "Heure"
+    ar: "الوقت"
 Select:
   placeholder:
     en: "Please select"
