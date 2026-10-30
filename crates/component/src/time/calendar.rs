@@ -33,6 +33,20 @@ fn uses_compact_text(kind: CalendarItemKind) -> bool {
     kind == CalendarItemKind::Month
 }
 
+/// The chevron of a navigation button. In RTL the row mirrors, so Previous
+/// sits at the right edge and points right, Next at the left and points left.
+fn nav_icon(kind: CalendarItemKind, rtl: bool) -> Option<IconName> {
+    match (kind, rtl) {
+        (CalendarItemKind::Previous, false) | (CalendarItemKind::Next, true) => {
+            Some(IconName::ChevronLeft)
+        }
+        (CalendarItemKind::Next, false) | (CalendarItemKind::Previous, true) => {
+            Some(IconName::ChevronRight)
+        }
+        _ => None,
+    }
+}
+
 /// Styled facade for the complete behavior and structure in `gpui-base`.
 #[derive(IntoElement)]
 pub struct Calendar {
@@ -100,15 +114,10 @@ impl RenderOnce for Calendar {
                 .into(),
                 _ => value.to_string().into(),
             })
-            .item(move |item, state, _, cx| {
-                let item = match state.kind() {
-                    CalendarItemKind::Previous => item
-                        .clear_children()
-                        .child(Icon::new(IconName::ChevronLeft).size_4()),
-                    CalendarItemKind::Next => item
-                        .clear_children()
-                        .child(Icon::new(IconName::ChevronRight).size_4()),
-                    _ => item,
+            .item(move |item, state, window, cx| {
+                let item = match nav_icon(state.kind(), window.layout_direction().is_rtl()) {
+                    Some(icon) => item.clear_children().child(Icon::new(icon).size_4()),
+                    None => item,
                 };
                 item.map(|this| match size {
                     Size::Small => this.size_7().rounded(cx.theme().radius / 2.),
@@ -211,7 +220,8 @@ impl RenderOnce for Calendar {
 
 #[cfg(test)]
 mod tests {
-    use super::{CalendarItemKind, Date, uses_compact_text};
+    use super::{CalendarItemKind, Date, nav_icon, uses_compact_text};
+    use crate::IconName;
     use chrono::NaiveDate;
 
     #[test]
@@ -228,5 +238,24 @@ mod tests {
         assert!(uses_compact_text(CalendarItemKind::Month));
         assert!(!uses_compact_text(CalendarItemKind::MonthToggle));
         assert!(!uses_compact_text(CalendarItemKind::Day));
+    }
+
+    #[test]
+    fn navigation_chevrons_point_outward_in_both_directions() {
+        use CalendarItemKind::{Day, Next, Previous};
+        assert!(matches!(
+            nav_icon(Previous, false),
+            Some(IconName::ChevronLeft)
+        ));
+        assert!(matches!(
+            nav_icon(Next, false),
+            Some(IconName::ChevronRight)
+        ));
+        assert!(matches!(
+            nav_icon(Previous, true),
+            Some(IconName::ChevronRight)
+        ));
+        assert!(matches!(nav_icon(Next, true), Some(IconName::ChevronLeft)));
+        assert!(nav_icon(Day, true).is_none());
     }
 }
