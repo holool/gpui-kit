@@ -1,7 +1,7 @@
 use gpui::{
-    AnyElement, App, Axis, ClickEvent, Half, InteractiveElement as _, IntoElement, ParentElement,
-    Pixels, RenderOnce, Role, StatefulInteractiveElement as _, StyleRefinement, Styled, Window,
-    div, prelude::FluentBuilder as _, px, relative,
+    AnyElement, App, Axis, ClickEvent, Directional as _, Half, InteractiveElement as _,
+    IntoElement, ParentElement, Pixels, RenderOnce, Role, StatefulInteractiveElement as _,
+    StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, px, relative,
 };
 use gpui_base::TestSupportExt as _;
 
@@ -234,22 +234,26 @@ impl RenderOnce for StepperSeparator {
 
         let gap = px(4.);
 
+        // Inline start and end, not left and right: in a right-to-left
+        // stepper the icon sits at the item's right, and the line runs from
+        // it towards the next item on its left.
         div()
+            .debug_selector(|| "stepper-separator".into())
             .absolute()
             .flex_1()
             .when(self.layout.is_horizontal(), |this| {
                 this.h(separator_wide).mt(icon_size.half()).map(|this| {
                     if !text_center {
-                        this.ml(icon_size + gap).mr(gap).left_0().right_0()
+                        this.ms(icon_size + gap).me(gap).start(px(0.)).end(px(0.))
                     } else {
                         this.mx(icon_size.half() + gap)
-                            .left(relative(0.5))
-                            .right(relative(-0.5))
+                            .start(relative(0.5))
+                            .end(relative(-0.5))
                     }
                 })
             })
             .when(self.layout.is_vertical(), |this| {
-                this.w(separator_wide).ml(icon_size.half()).map(|this| {
+                this.w(separator_wide).ms(icon_size.half()).map(|this| {
                     if !text_center {
                         this.mt(icon_size + gap).mb(gap).top_0().bottom_0()
                     } else {
@@ -262,5 +266,56 @@ impl RenderOnce for StepperSeparator {
             .refine_style(&self.style)
             .bg(cx.theme().border)
             .when(self.checked, |this| this.bg(cx.theme().tokens.primary))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use gpui::{Context, LayoutDirection, Render, TestAppContext};
+
+    use super::*;
+    use crate::stepper::Stepper;
+
+    /// The line between two steps starts after the first step's icon, at the
+    /// inline start: the left in LTR, the right in RTL. It never runs
+    /// through the icon.
+    #[gpui::test]
+    fn the_separator_runs_from_the_icon_towards_the_next_step(cx: &mut TestAppContext) {
+        struct Harness(LayoutDirection);
+        impl Render for Harness {
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                div().w(px(400.)).direction(self.0).child(
+                    div().debug_selector(|| "stepper-track".into()).child(
+                        Stepper::new("steps")
+                            .selected_index(1)
+                            .items([StepperItem::new().child("A"), StepperItem::new().child("B")]),
+                    ),
+                )
+            }
+        }
+
+        cx.update(crate::init);
+        // The default size: a 24 px icon, a 4 px gap.
+        let clear = px(24.) + px(4.);
+        for direction in [LayoutDirection::Ltr, LayoutDirection::Rtl] {
+            let (_, visual) = cx.add_window_view(move |_, _| Harness(direction));
+            visual.update(|window, cx| window.draw(cx).clear(cx));
+            let track = visual.debug_bounds("stepper-track").unwrap();
+            let line = visual.debug_bounds("stepper-separator").unwrap();
+            assert!(line.size.width > px(0.));
+            if direction.is_rtl() {
+                assert_eq!(
+                    line.right(),
+                    track.right() - clear,
+                    "RTL starts left of the icon"
+                );
+            } else {
+                assert_eq!(
+                    line.left(),
+                    track.left() + clear,
+                    "LTR starts right of the icon"
+                );
+            }
+        }
     }
 }
